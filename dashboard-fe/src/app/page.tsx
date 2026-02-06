@@ -1,10 +1,11 @@
 import HeaderDashboard from "@/components/HeaderDashboard";
-
+import ListRoom from "@/components/ListRoom";
 
 export default function Home() {
   return (
-    <main>
-      <HeaderDashboard/>
+    <main className="min-h-screen">
+      <HeaderDashboard />
+      <ListRoom />
     </main>
   );
 }
