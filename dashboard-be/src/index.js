@@ -17,12 +17,30 @@ const io = new Server(httpServer, {
   cors: { origin: "*" },
 });
 
-// --- API ENDPOINTS ---
+app.get("/api/rooms/status", async (req, res) => {
+  try {
+    const db = getDB();
+    const roomsStatus = await db
+      .collection("rooms")
+      .find({})
+      .project({
+        room_id: 1,
+        "last_reading.timestamp": 1,
+        _id: 0,
+      })
+      .toArray();
 
-/**
- * 1. Endpoint untuk Gauge Chart
- * Mengambil data bacaan terakhir dari semua ruangan
- */
+    const result = roomsStatus.map((room) => ({
+      room_id: room.room_id,
+      last_active: room.last_reading?.timestamp || null,
+    }));
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch activity status" });
+  }
+});
+
 app.get("/api/rooms", async (req, res) => {
   try {
     const db = getDB();
@@ -33,15 +51,10 @@ app.get("/api/rooms", async (req, res) => {
   }
 });
 
-/**
- * 2. Endpoint untuk Line Chart
- * Mengambil history data berdasarkan Room ID dan Tanggal tertentu
- */
 app.get("/api/logs/:roomId", async (req, res) => {
   try {
     const db = getDB();
     const { roomId } = req.params;
-    // Ambil tanggal hari ini jika tidak ada query date
     const date = req.query.date || new Date().toISOString().split("T")[0];
 
     const logs = await db
@@ -56,8 +69,6 @@ app.get("/api/logs/:roomId", async (req, res) => {
   }
 });
 
-// --- CORE SERVICES (MQTT & SOCKET) ---
-
 const startServer = async () => {
   try {
     await connectDB();
@@ -65,7 +76,6 @@ const startServer = async () => {
     const mqttClient = mqtt.connect(process.env.MQTT_BROKER);
 
     mqttClient.on("connect", () => {
-      console.log("✅ MQTT Connected & Subscribed to Palka Topics");
       mqttClient.subscribe("palka/+/data");
     });
 
@@ -74,31 +84,60 @@ const startServer = async () => {
         const roomId = topic.split("/")[1];
         const payload = JSON.parse(message.toString());
 
-        // Validasi payload sederhana
         if (payload.temp === undefined || payload.hum === undefined) return;
 
-        // Simpan ke MongoDB (Real-time & History)
         await processSensorData(roomId, payload);
 
-        // Broadcast data ke semua client yang terkoneksi via WebSocket
-        io.emit("sensor-update", {
+        const updateData = {
           room_id: roomId,
           temp: payload.temp,
           hum: payload.hum,
           ts: new Date(),
+        };
+
+        io.emit("sensor-update", updateData);
+
+        io.emit("room-status-update", {
+          room_id: roomId,
+          status: "online",
+          last_active: updateData.ts,
         });
       } catch (err) {
-        console.error("⚠️ Message Error:", err.message);
+        console.error(err.message);
       }
     });
 
+    setInterval(async () => {
+      try {
+        const db = getDB();
+        const rooms = await db.collection("rooms").find({}).toArray();
+        const now = new Date();
+
+        rooms.forEach((room) => {
+          if (room.last_reading?.timestamp) {
+            const lastActive = new Date(room.last_reading.timestamp);
+            const diff = (now - lastActive) / 1000 / 60;
+
+            if (diff > 5) {
+              io.emit("room-status-update", {
+                room_id: room.room_id,
+                status: "offline",
+                last_active: lastActive,
+              });
+            }
+          }
+        });
+      } catch (err) {
+        console.error(err.message);
+      }
+    }, 60000);
+
     const PORT = process.env.PORT || 4000;
     httpServer.listen(PORT, () => {
-      console.log(`🚀 Backend Sensor Service online on port ${PORT}`);
-      console.log(`📡 API Available at http://localhost:${PORT}/api/rooms`);
+      console.log(`Server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error("❌ Critical Server Error:", error);
+    console.error(error);
   }
 };
 
