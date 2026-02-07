@@ -6,8 +6,8 @@ const processSensorData = async (roomId, payload) => {
   const dateStr = now.toISOString().split("T")[0];
   const hour = now.getHours();
 
-  // 1. Update Dokumen Real-time (Untuk Gauge Dashboard)
-  await db.collection("rooms").updateOne(
+  // 1. Update Dokumen Real-time
+  const result = await db.collection("rooms").findOneAndUpdate(
     { room_id: roomId },
     {
       $set: {
@@ -18,10 +18,17 @@ const processSensorData = async (roomId, payload) => {
         },
       },
     },
-    { upsert: true },
+    {
+      upsert: false,
+      returnDocument: "after",
+    },
   );
 
-  // 2. Update Dokumen Bucket (Untuk Line Chart Trend)
+  // MongoDB Driver terbaru mengembalikan dokumen langsung di objek 'result'
+  // Namun beberapa versi lama menaruhnya di 'result.value'
+  const updatedDoc = result.value ? result.value : result;
+
+  // 2. Update Dokumen Bucket
   await db.collection("sensor_logs").updateOne(
     { room_id: roomId, date: dateStr, hour: hour },
     {
@@ -30,6 +37,8 @@ const processSensorData = async (roomId, payload) => {
     },
     { upsert: true },
   );
+
+  return updatedDoc;
 };
 
 module.exports = { processSensorData };

@@ -8,7 +8,10 @@ const connectDB = async () => {
   try {
     await client.connect();
     db = client.db(process.env.DB_NAME);
-    console.log("✅ MongoDB Connected");
+
+    await db.collection("rooms").createIndex({ room_id: 1 }, { unique: true });
+
+    console.log("✅ MongoDB Connected & Indexed");
     return db;
   } catch (error) {
     console.error("❌ MongoDB Connection Error:", error);
