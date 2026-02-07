@@ -26,14 +26,36 @@ const getRoomTrend = async (room_id) => {
   const db = getDB();
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  return await db
+  // Menggunakan Aggregation agar data 'measurements' keluar dari array-nya
+  const results = await db
     .collection("sensor_logs")
-    .find({
-      room_id,
-      timestamp: { $gte: oneDayAgo },
-    })
-    .sort({ timestamp: 1 })
+    .aggregate([
+      {
+        $match: {
+          room_id: room_id,
+          // Cari dokumen yang memiliki setidaknya satu data dalam 24 jam terakhir
+          "measurements.ts": { $gte: oneDayAgo },
+        },
+      },
+      { $unwind: "$measurements" }, // Memecah array menjadi dokumen terpisah
+      {
+        $match: {
+          "measurements.ts": { $gte: oneDayAgo }, // Filter ulang setelah dipecah
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          temp: "$measurements.t",
+          hum: "$measurements.h",
+          timestamp: "$measurements.ts",
+        },
+      },
+      { $sort: { timestamp: 1 } }, // Urutkan dari yang paling lama
+    ])
     .toArray();
+
+  return results; // Akan mengembalikan array: [{temp, hum, timestamp}, ...]
 };
 
 module.exports = { updateRoomStatus, getAllRooms, getRoomTrend };

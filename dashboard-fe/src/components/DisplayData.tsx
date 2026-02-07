@@ -1,9 +1,27 @@
 "use client";
 import { useState, useEffect, ReactNode } from "react";
 import { socket } from "@/lib/socket";
-import React from "react";
-import { Doughnut } from "react-chartjs-2";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
+import { Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  TimeScale,
+} from "chart.js";
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+);
 
 import dynamic from "next/dynamic";
 const GaugeComponent = dynamic(() => import("react-gauge-component"), {
@@ -11,8 +29,6 @@ const GaugeComponent = dynamic(() => import("react-gauge-component"), {
 });
 
 type CardProps = { children: ReactNode };
-
-ChartJS.register(ArcElement, Tooltip, Legend);
 
 function Card({ children }: CardProps) {
   return (
@@ -28,37 +44,74 @@ export default function DisplayData({
   selectedRoomId: string;
 }) {
   const [data, setData] = useState({ temp: 0, hum: 0 });
+  const [history, setHistory] = useState<any[]>([]); // State untuk trend
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedRoomId) return;
 
-    // A. Ambil data terakhir dari DB agar tidak 0 saat pertama klik
     setLoading(true);
-    fetch(`http://localhost:4000/api/rooms`)
-      .then((res) => res.json())
-      .then((rooms: any[]) => {
-        const current = rooms.find((r) => r.room_id === selectedRoomId);
+
+    // 1. Ambil data trend 24 jam terakhir & Data Terakhir
+    const fetchData = async () => {
+      try {
+        const [resRooms, resTrend] = await Promise.all([
+          fetch(`http://localhost:4000/api/rooms`),
+          fetch(`http://localhost:4000/api/rooms/${selectedRoomId}/trend`),
+        ]);
+
+        const rooms = await resRooms.json();
+        const trend = await resTrend.json();
+
+        // Update Gauge
+        const current = rooms.find((r: any) => r.room_id === selectedRoomId);
         if (current?.last_reading) {
           setData({
             temp: current.last_reading.temp || 0,
-            hum: current.last_reading.humidity || 0,
+            hum: current.last_reading.hum || 0,
           });
         }
-        setLoading(false);
-      });
 
-    // B. Listen data real-time
-    const handleUpdate = (newData: any) => {
-      if (newData.room_id === selectedRoomId) {
-        setData({ temp: newData.temp, hum: newData.hum });
+        // Update Trend
+        setHistory(trend);
+        setLoading(false);
+      } catch (err) {
+        console.error("Fetch error:", err);
+        setLoading(false);
       }
     };
 
+    fetchData();
+
+    // 2. Listen data real-time via Socket
+    // Menggunakan event spesifik room agar lebih efisien (sesuai refactor backend sebelumnya)
+    const handleUpdate = (newData: any) => {
+      // Pastikan data untuk room yang dipilih
+      if (newData.room_id === selectedRoomId || !newData.room_id) {
+        const sensorPayload = {
+          temp: newData.temp,
+          hum: newData.hum,
+          timestamp: newData.timestamp || new Date(),
+        };
+
+        // Update Gauge
+        setData({ temp: sensorPayload.temp, hum: sensorPayload.hum });
+
+        // Update Chart & Maintain 24h Window
+        setHistory((prev) => {
+          const updated = [...prev, sensorPayload];
+          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          return updated.filter((d) => new Date(d.timestamp) >= oneDayAgo);
+        });
+      }
+    };
+
+    socket.on(`sensor-update-${selectedRoomId}`, handleUpdate);
+    // Fallback jika backend lama masih pakai "sensor-update" umum
     socket.on("sensor-update", handleUpdate);
 
     return () => {
-      // Perbaikan: Hapus listener spesifik agar tidak mengganggu komponen lain
+      socket.off(`sensor-update-${selectedRoomId}`, handleUpdate);
       socket.off("sensor-update", handleUpdate);
     };
   }, [selectedRoomId]);
@@ -86,6 +139,51 @@ export default function DisplayData({
   };
 
   const currentHumColor = getHumColor(data.hum);
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: true, position: "top" as const } },
+    scales: {
+      x: { ticks: { maxTicksLimit: 8 } },
+      y: { beginAtZero: false },
+    },
+    animation: { duration: 0 }, // Performa lebih lancar untuk real-time
+  };
+
+  const getChartConfig = (label: string, dataKey: string, color: string) => ({
+    labels: history.map((h) =>
+      new Date(h.timestamp).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    ),
+    datasets: [
+      {
+        label: label,
+        data: history.map((h) => h[dataKey]),
+        borderColor: color,
+        backgroundColor: `${color}20`,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 0,
+      },
+    ],
+  });
+
+  const lineChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        ticks: { maxTicksLimit: 5, font: { size: 10 } },
+        grid: { display: false },
+      },
+      y: { ticks: { font: { size: 10 } } },
+    },
+    animation: { duration: 0 },
+  };
 
   return (
     <div
@@ -132,6 +230,42 @@ export default function DisplayData({
             {data.temp}
             <span className="ml-1 text-2xl">°C</span>
           </div>
+          <div className="mt-4 h-40 w-full">
+            <Line
+              data={{
+                labels: (history || []).map((h) =>
+                  new Date(h.timestamp).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                ),
+                datasets: [
+                  {
+                    label: "Temp Trend",
+                    data: (history || []).map((h) => h.temp),
+                    borderColor: "#EA4228",
+                    backgroundColor: "rgba(234, 66, 40, 0.1)",
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: {
+                    ticks: { maxTicksLimit: 5, font: { size: 10 } },
+                    grid: { display: false },
+                  },
+                  y: { ticks: { font: { size: 10 } } },
+                },
+                animation: { duration: 0 },
+              }}
+            />
+          </div>
         </Card>
 
         <Card>
@@ -171,6 +305,49 @@ export default function DisplayData({
           >
             {data.hum}
             <span className="ml-1 text-2xl">%</span>
+          </div>
+          <div className="mt-4 h-40 w-full">
+            <Line
+              data={{
+                labels: (history || []).map((h) =>
+                  new Date(h.timestamp).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                ),
+                datasets: [
+                  {
+                    label: "Humidity Trend",
+                    data: (history || []).map((h) => h.hum),
+                    borderColor: "#1E88E5",
+                    backgroundColor: "rgba(30, 136, 229, 0.1)",
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                  },
+                ],
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: {
+                    ticks: { maxTicksLimit: 5, font: { size: 10 } },
+                    grid: { display: false },
+                  },
+                  y: {
+                    ticks: {
+                      font: { size: 10 },
+                      callback: (value) => `${value}%`,
+                    },
+                    min: 0,
+                    max: 100,
+                  },
+                },
+                animation: { duration: 0 },
+              }}
+            />
           </div>
         </Card>
       </div>

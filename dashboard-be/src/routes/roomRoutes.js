@@ -1,7 +1,7 @@
 // dashboard-be/src/routes/roomRoutes.js
 const express = require("express");
 const router = express.Router();
-const { getAllRooms } = require("../services/roomService");
+const { getAllRooms, getRoomTrend } = require("../services/roomService");
 
 router.get("/", async (req, res) => {
   try {

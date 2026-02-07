@@ -1,3 +1,4 @@
+// dashboard-be/src/config/database.js
 const { MongoClient } = require("mongodb");
 require("dotenv").config();
 
