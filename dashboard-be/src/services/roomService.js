@@ -1,6 +1,7 @@
+// dashboard-be/src/services/roomService.js
 const { getDB } = require("../config/database");
 
-const updateRoomStatus = async (room_id, timestamp) => {
+const updateRoomStatus = async (room_id, payload) => {
   const db = getDB();
   const result = await db.collection("rooms").findOneAndUpdate(
     { room_id },
