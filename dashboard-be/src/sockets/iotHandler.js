@@ -18,7 +18,11 @@ const initIoTHandler = (io) => {
 
       // Emit data sensor mentah
       io.emit("sensor-update", { room_id, ...payload, timestamp: new Date() });
-
+      io.emit(`sensor-update-${room_id}`, {
+        temp: payload.temp,
+        hum: payload.hum,
+        timestamp: new Date(),
+      });
       // Emit status room
       io.emit("room-status-update", {
         id: updatedRoom._id,

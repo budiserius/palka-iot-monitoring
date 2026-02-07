@@ -22,4 +22,18 @@ const getAllRooms = async () => {
   return await db.collection("rooms").find({}).toArray();
 };
 
-module.exports = { updateRoomStatus, getAllRooms };
+const getRoomTrend = async (room_id) => {
+  const db = getDB();
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  return await db
+    .collection("sensor_logs")
+    .find({
+      room_id,
+      timestamp: { $gte: oneDayAgo },
+    })
+    .sort({ timestamp: 1 })
+    .toArray();
+};
+
+module.exports = { updateRoomStatus, getAllRooms, getRoomTrend };
