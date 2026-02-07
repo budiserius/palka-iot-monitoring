@@ -13,7 +13,11 @@ interface Room {
   last_active?: string; // Menyimpan timestamp
 }
 
-export default function ListRoom() {
+export default function ListRoom({
+  onSelectRoom,
+}: {
+  onSelectRoom: (id: string) => void;
+}) {
   const [isRollUp, setIsRollUp] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
 
@@ -118,13 +122,7 @@ export default function ListRoom() {
                 key={room.id}
                 className="max-md:flex max-md:w-full max-md:justify-center"
               >
-                <Button
-                  onClick={() =>
-                    alert(
-                      `Ruangan: ${room.room_id}\nStatus: ${room.status}\nUpdate: ${room.last_active ? new Date(room.last_active).toLocaleString() : "Tidak ada data"}`,
-                    )
-                  }
-                >
+                <Button onClick={() => onSelectRoom(room.room_id)}>
                   <span className="truncate">{room.room_id}</span>
                   <div
                     className={

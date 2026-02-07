@@ -41,24 +41,30 @@ const startServer = async () => {
     mqttClient.on("message", async (topic, message) => {
       try {
         const room_id = topic.split("/")[1];
+        const payload = JSON.parse(message.toString());
         const now = new Date();
+        const sensorData = {
+          room_id,
+          temp: payload.temp,
+          hum: payload.hum,
+          timestamp: new Date(),
+        };
 
         const result = await db.collection("rooms").findOneAndUpdate(
-          { room_id: room_id }, // Cari berdasarkan room_id
+          { room_id: room_id },
           {
             $set: {
               "last_reading.timestamp": now,
-              // Anda bisa tambahkan payload temp/hum di sini jika ingin disimpan
             },
           },
           {
-            upsert: true, // Jika tidak ada, buat baru
+            upsert: true,
             returnDocument: "after",
           },
         );
 
         const updatedRoom = result.value || result;
-
+        io.emit("sensor-update", sensorData);
         io.emit("room-status-update", {
           id: updatedRoom._id.toString(),
           room_id: room_id,
@@ -81,7 +87,7 @@ const startServer = async () => {
             const lastActive = new Date(room.last_reading.timestamp);
             const diff = (now - lastActive) / 1000 / 60; // Hitung selisih menit
 
-            if (diff > 5) {
+            if (diff > 1) {
               // Jika lebih dari 5 menit tidak ada data
               io.emit("room-status-update", {
                 id: room._id.toString(),
