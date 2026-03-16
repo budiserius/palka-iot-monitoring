@@ -1,6 +1,10 @@
 // dashboard-be/src/sockets/iotHandler.js
 const mqtt = require("mqtt");
-const { updateRoomStatus, getAllRooms } = require("../services/roomService");
+const {
+  updateRoomStatus,
+  getAllRooms,
+  logSensorData,
+} = require("../services/roomService");
 
 const initIoTHandler = (io) => {
   const mqttClient = mqtt.connect(process.env.MQTT_BROKER);

@@ -1,6 +1,6 @@
 const mqtt = require("mqtt");
 
-const client = mqtt.connect("mqtt://localhost:1883");
+const client = mqtt.connect("mqtt://103.67.78.244:1883");
 const ROOM_ID = "Test001";
 const TOPIC = `palka/${ROOM_ID}/data`;
 
