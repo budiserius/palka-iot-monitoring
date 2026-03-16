@@ -7,15 +7,20 @@ let db;
 
 const connectDB = async () => {
   try {
+    if (!process.env.MONGODB_URI || !process.env.DB_NAME) {
+      throw new Error(
+        "Missing MONGODB_URI or DB_NAME in environment variables",
+      );
+    }
     await client.connect();
     db = client.db(process.env.DB_NAME);
 
     await db.collection("rooms").createIndex({ room_id: 1 }, { unique: true });
 
-    console.log("✅ MongoDB Connected & Indexed");
+    console.log("INFO: MongoDB Connected & Indexed");
     return db;
   } catch (error) {
-    console.error("❌ MongoDB Connection Error:", error);
+    console.error("ERROR: MongoDB Connection Error:", error);
     process.exit(1);
   }
 };

@@ -1,3 +1,4 @@
+// dashboard-be/src/sockets/iotHandler.js
 const mqtt = require("mqtt");
 const { updateRoomStatus, getAllRooms } = require("../services/roomService");
 
@@ -6,40 +7,46 @@ const initIoTHandler = (io) => {
 
   mqttClient.on("connect", () => {
     mqttClient.subscribe("palka/+/data");
-    console.log("📡 MQTT Subscribed");
+    console.log("INFO: MQTT Subscribed");
   });
 
   mqttClient.on("message", async (topic, message) => {
     try {
       const room_id = topic.split("/")[1];
       const payload = JSON.parse(message.toString());
+      const temp = payload.temp;
+
+      let alarmStatus = "Connected";
+      if (temp >= 55 && temp < 60) alarmStatus = "Warning Level 1";
+      else if (temp >= 60 && temp < 65) alarmStatus = "Warning Level 2";
+      else if (temp >= 65) alarmStatus = "Emergency";
 
       const updatedRoom = await updateRoomStatus(room_id, payload);
 
-      // Emit data sensor mentah
       io.emit("sensor-update", { room_id, ...payload, timestamp: new Date() });
-      io.emit(`sensor-update-${room_id}`, {
-        temp: payload.temp,
-        hum: payload.hum,
-        timestamp: new Date(),
-      });
-      // Emit status room
+
       io.emit("room-status-update", {
-        id: updatedRoom._id,
+        id: updatedRoom._id || updatedRoom.value?._id,
         room_id,
-        status: "online",
+        status: alarmStatus,
         timestamp: new Date(),
       });
+
+      // // 3. Perbaiki bagian ini: Gunakan variabel alarmStatus, bukan string "online" manual
+      // io.emit("room-status-update", {
+      //   id: updatedRoom._id || updatedRoom.value?._id, // Penanganan jika return findOneAndUpdate berbeda
+      //   room_id,
+      //   status: alarmStatus,
+      //   timestamp: new Date(),
+      // });
     } catch (err) {
-      console.error("⚠️ IoT Handler Error:", err.message);
+      console.error("ERROR: IoT Handler Error:", err.message);
     }
   });
 
-  // Background task: Cek offline setiap 60 detik
   setInterval(async () => {
     const rooms = await getAllRooms();
     const now = new Date();
-
     rooms.forEach((room) => {
       if (room.last_reading?.timestamp) {
         const diff = (now - new Date(room.last_reading.timestamp)) / 1000 / 60;
@@ -47,7 +54,7 @@ const initIoTHandler = (io) => {
           io.emit("room-status-update", {
             id: room._id,
             room_id: room.room_id,
-            status: "offline",
+            status: "Disconnected", // Sesuai dengan type RoomStatus di Frontend
             timestamp: room.last_reading.timestamp,
           });
         }

@@ -18,12 +18,11 @@ app.use("/api/rooms", roomRoutes);
 const startServer = async () => {
   await connectDB();
 
-  // Inisialisasi logika MQTT & Socket
   initIoTHandler(io);
 
   const PORT = process.env.PORT || 4000;
   httpServer.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`INFO: Server running on port ${PORT}`);
   });
 };
 

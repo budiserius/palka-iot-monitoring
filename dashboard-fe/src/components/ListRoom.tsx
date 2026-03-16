@@ -4,13 +4,18 @@ import Button from "./atoms/Button";
 import { useState, useEffect } from "react";
 import { socket } from "@/lib/socket";
 
-type RoomStatus = "Connected" | "Disconnected" | "Busy";
+type RoomStatus =
+  | "Connected"
+  | "Disconnected"
+  | "Warning Level 1"
+  | "Warning Level 2"
+  | "Emergency";
 
 interface Room {
-  id: string; // ID dari MongoDB (_id)
-  room_id: string; // Nama ID Ruangan (Room-1, dsb)
+  id: string;
+  room_id: string;
   status: RoomStatus;
-  last_active?: string; // Menyimpan timestamp
+  last_active?: string;
 }
 
 export default function ListRoom({
@@ -23,32 +28,42 @@ export default function ListRoom({
 
   const statusColors: Record<RoomStatus, string> = {
     Connected: "bg-green-500",
-    Disconnected: "bg-red-500",
-    Busy: "bg-yellow-500",
+    Disconnected: "bg-gray-500",
+    "Warning Level 1": "bg-orange-400 animate-pulse", // Level 1: Oranye berkedip
+    "Warning Level 2": "bg-orange-600 animate-pulse", // Level 2: Oranye tua berkedip
+    Emergency: "bg-red-600 animate-ping", // Emergency: Merah berdenyut kencang
   };
 
   useEffect(() => {
-    // 1. Ambil daftar ruangan awal saat halaman dimuat
-    fetch("http://localhost:4000/api/rooms")
+    fetch(`http://localhost:4000/api/rooms`)
       .then((res) => res.json())
       .then((data: any[]) => {
-        const formattedRooms: Room[] = data.map((item) => ({
-          id: item._id,
-          room_id: item.room_id,
-          // Status awal: Jika aktif dalam 5 menit terakhir, set Connected
-          status: (item.last_reading?.timestamp &&
-          new Date().getTime() -
-            new Date(item.last_reading.timestamp).getTime() <
-            300000
-            ? "Connected"
-            : "Disconnected") as RoomStatus,
-          last_active: item.last_reading?.timestamp,
-        }));
-        setRooms(formattedRooms);
-      })
-      .catch((err) => console.error("Gagal memuat daftar ruangan:", err));
+        const formattedRooms: Room[] = data.map((item) => {
+          const temp = item.last_reading?.temp || 0;
+          const lastTs = item.last_reading?.timestamp;
+          const isTimeout =
+            !lastTs ||
+            new Date().getTime() - new Date(lastTs).getTime() > 60000;
 
-    // 2. Mendengarkan pembaruan status real-time dari WebSocket
+          // Logika penentuan status awal yang sama dengan Backend
+          let initialStatus: RoomStatus = "Disconnected";
+          if (!isTimeout) {
+            if (temp >= 65) initialStatus = "Emergency";
+            else if (temp >= 60) initialStatus = "Warning Level 2";
+            else if (temp >= 55) initialStatus = "Warning Level 1";
+            else initialStatus = "Connected";
+          }
+
+          return {
+            id: item._id,
+            room_id: item.room_id,
+            status: initialStatus,
+            last_active: lastTs,
+          };
+        });
+        setRooms(formattedRooms);
+      });
+
     socket.on(
       "room-status-update",
       (data: {
@@ -59,12 +74,9 @@ export default function ListRoom({
       }) => {
         setRooms((prevRooms) => {
           const roomExists = prevRooms.find((r) => r.room_id === data.room_id);
-          const newStatus = (
-            data.status === "online" ? "Connected" : "Disconnected"
-          ) as RoomStatus;
+          const newStatus = data.status as RoomStatus;
 
           if (roomExists) {
-            // Update status ruangan yang sudah ada
             return prevRooms.map((room) =>
               room.room_id === data.room_id
                 ? {
