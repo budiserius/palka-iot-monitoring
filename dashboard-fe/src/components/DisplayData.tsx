@@ -11,8 +11,8 @@ import {
   Title,
   Tooltip,
   Legend,
-  TimeScale,
 } from "chart.js";
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -44,7 +44,7 @@ export default function DisplayData({
   selectedRoomId: string;
 }) {
   const [data, setData] = useState({ temp: 0, hum: 0 });
-  const [history, setHistory] = useState<any[]>([]); // State untuk trend
+  const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -52,7 +52,6 @@ export default function DisplayData({
 
     setLoading(true);
 
-    // 1. Ambil data trend 24 jam terakhir & Data Terakhir
     const fetchData = async () => {
       try {
         const [resRooms, resTrend] = await Promise.all([
@@ -63,16 +62,14 @@ export default function DisplayData({
         const rooms = await resRooms.json();
         const trend = await resTrend.json();
 
-        // Update Gauge
         const current = rooms.find((r: any) => r.room_id === selectedRoomId);
         if (current?.last_reading) {
           setData({
             temp: current.last_reading.temp || 0,
-            hum: current.last_reading.hum || 0,
+            hum: current.last_reading.humidity || current.last_reading.hum || 0,
           });
         }
 
-        // Update Trend
         setHistory(trend);
         setLoading(false);
       } catch (err) {
@@ -83,21 +80,17 @@ export default function DisplayData({
 
     fetchData();
 
-    // 2. Listen data real-time via Socket
-    // Menggunakan event spesifik room agar lebih efisien (sesuai refactor backend sebelumnya)
+    // HANDLER 1: Menerima data sensor normal
     const handleUpdate = (newData: any) => {
-      // Pastikan data untuk room yang dipilih
-      if (newData.room_id === selectedRoomId || !newData.room_id) {
+      if (newData.room_id === selectedRoomId) {
         const sensorPayload = {
           temp: newData.temp,
           hum: newData.hum,
           timestamp: newData.timestamp || new Date(),
         };
 
-        // Update Gauge
         setData({ temp: sensorPayload.temp, hum: sensorPayload.hum });
 
-        // Update Chart & Maintain 24h Window
         setHistory((prev) => {
           const updated = [...prev, sensorPayload];
           const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -106,13 +99,36 @@ export default function DisplayData({
       }
     };
 
+    // HANDLER 2: Menerima sinyal "Disconnected" (0-kan data)
+    const handleStatusUpdate = (statusData: any) => {
+      if (
+        statusData.room_id === selectedRoomId &&
+        statusData.status === "Disconnected"
+      ) {
+        const offlinePayload = {
+          temp: 0,
+          hum: 0,
+          timestamp: new Date(),
+        };
+
+        setData({ temp: 0, hum: 0 }); // Gauge jadi 0
+
+        setHistory((prev) => {
+          const updated = [...prev, offlinePayload]; // Grafik tambah titik 0
+          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          return updated.filter((d) => new Date(d.timestamp) >= oneDayAgo);
+        });
+      }
+    };
+
     socket.on(`sensor-update-${selectedRoomId}`, handleUpdate);
-    // Fallback jika backend lama masih pakai "sensor-update" umum
     socket.on("sensor-update", handleUpdate);
+    socket.on("room-status-update", handleStatusUpdate); // DAFTARKAN LISTENER STATUS
 
     return () => {
       socket.off(`sensor-update-${selectedRoomId}`, handleUpdate);
       socket.off("sensor-update", handleUpdate);
+      socket.off("room-status-update", handleStatusUpdate); // BERSIHKAN
     };
   }, [selectedRoomId]);
 
@@ -124,52 +140,20 @@ export default function DisplayData({
     );
   }
 
+  // --- Logika Warna & Config (Tetap Sama) ---
   const getTempColor = (temp: any) => {
-    if (temp <= 20) return "#5BE12C"; // Cold/Safe
-    if (temp <= 40) return "#F5CD19"; // Warning/Warm
-    return "#EA4228"; // Hot/Danger
+    if (temp <= 0) return "#9ca3af"; // Abu-abu jika sensor mati
+    if (temp <= 20) return "#5BE12C";
+    if (temp <= 40) return "#F5CD19";
+    return "#EA4228";
   };
-
-  const currentColor = getTempColor(data.temp);
 
   const getHumColor = (hum: any) => {
-    if (hum < 30) return "#93C5FD"; // Biru muda (Kering)
-    if (hum <= 70) return "#3B82F6"; // Biru standar (Ideal)
-    return "#1E3A8A"; // Biru gelap (Sangat Lembap/Basah)
+    if (hum <= 0) return "#9ca3af";
+    if (hum < 30) return "#93C5FD";
+    if (hum <= 70) return "#3B82F6";
+    return "#1E3A8A";
   };
-
-  const currentHumColor = getHumColor(data.hum);
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: true, position: "top" as const } },
-    scales: {
-      x: { ticks: { maxTicksLimit: 8 } },
-      y: { beginAtZero: false },
-    },
-    animation: { duration: 0 }, // Performa lebih lancar untuk real-time
-  };
-
-  const getChartConfig = (label: string, dataKey: string, color: string) => ({
-    labels: history.map((h) =>
-      new Date(h.timestamp).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    ),
-    datasets: [
-      {
-        label: label,
-        data: history.map((h) => h[dataKey]),
-        borderColor: color,
-        backgroundColor: `${color}20`,
-        fill: true,
-        tension: 0.4,
-        pointRadius: 0,
-      },
-    ],
-  });
 
   const lineChartOptions = {
     responsive: true,
@@ -182,58 +166,52 @@ export default function DisplayData({
       },
       y: { ticks: { font: { size: 10 } } },
     },
-    animation: { duration: 0 },
+    animation: { duration: 1000, easing: "linear" as const }, // Animasi diperhalus
   };
 
   return (
     <div
       className={`w-full p-4 transition-opacity md:p-6 ${loading ? "opacity-50" : "opacity-100"}`}
     >
-      <h2 className="text-2xl font-bold">Monitoring: {selectedRoomId}</h2>
-
+      <h2 className="mb-4 text-2xl font-bold">Monitoring: {selectedRoomId}</h2>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        {/* Card Temperature */}
         <Card>
-          <h2 className="text-2xl font-bold">Temperature Palka</h2>
+          <h2 className="mb-2 text-xl font-bold">Temperature Palka</h2>
           <GaugeComponent
-            minValue={-10} // Menyesuaikan suhu palka bisa minus
-            maxValue={50} // Batas atas suhu palka
             value={data.temp}
-            type="semicircle"
+            minValue={-10}
+            maxValue={100}
             arc={{
               width: 0.2,
               padding: 0.02,
               subArcs: [
-                { limit: 20, color: "#5BE12C" },
-                { limit: 40, color: "#F5CD19" },
-                { color: "#EA4228" },
+                { limit: 55, color: "#5BE12C" }, // 0 - 55: Aman (Hijau)
+                { limit: 60, color: "#FB923C" }, // 55 - 60: Warning Level 1 (Oranye Muda)
+                { limit: 65, color: "#EA580C" }, // 60 - 65: Warning Level 2 (Oranye Tua)
+                { color: "#DC2626" }, // > 65: Emergency (Merah)
               ],
             }}
             labels={{
-              valueLabel: { hide: true },
+              valueLabel: {
+                hide: true, // Ini akan menyembunyikan angka di dalam gauge
+              },
               tickLabels: {
-                hideMinMax: true, // Menghilangkan label angka min/max
-                ticks: [], // Menghilangkan semua tick label
+                hideMinMax: false, // Set ke true jika ingin sembunyikan angka 0 dan 100 juga
               },
             }}
-            pointer={{
-              type: "needle",
-              elastic: true,
-              color: "#464646", // Warna pointer agar lebih kontras
-            }}
           />
-
-          {/* Warna div sekarang mengikuti variabel currentColor */}
           <div
-            className="text-6xl font-black transition-colors duration-500"
-            style={{ color: currentColor }}
+            className="my-4 text-5xl font-black"
+            style={{ color: getTempColor(data.temp) }}
           >
             {data.temp}
-            <span className="ml-1 text-2xl">°C</span>
+            <span className="text-xl">°C</span>
           </div>
-          <div className="mt-4 h-40 w-full">
+          <div className="h-40 w-full">
             <Line
               data={{
-                labels: (history || []).map((h) =>
+                labels: history.map((h) =>
                   new Date(h.timestamp).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -241,8 +219,7 @@ export default function DisplayData({
                 ),
                 datasets: [
                   {
-                    label: "Temp Trend",
-                    data: (history || []).map((h) => h.temp),
+                    data: history.map((h) => h.temp),
                     borderColor: "#EA4228",
                     backgroundColor: "rgba(234, 66, 40, 0.1)",
                     fill: true,
@@ -251,65 +228,43 @@ export default function DisplayData({
                   },
                 ],
               }}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  x: {
-                    ticks: { maxTicksLimit: 5, font: { size: 10 } },
-                    grid: { display: false },
-                  },
-                  y: { ticks: { font: { size: 10 } } },
-                },
-                animation: { duration: 0 },
-              }}
+              options={lineChartOptions}
             />
           </div>
         </Card>
 
+        {/* Card Humidity */}
         <Card>
-          <h2 className="text-2xl font-bold">Humidity Palka</h2>
-
+          <h2 className="mb-2 text-xl font-bold">Humidity Palka</h2>
           <GaugeComponent
-            minValue={0}
-            maxValue={100}
             value={data.hum}
-            type="semicircle"
             arc={{
-              width: 0.2,
-              padding: 0.02,
               subArcs: [
-                { limit: 30, color: "#93C5FD" }, // Dry
-                { limit: 70, color: "#3B82F6" }, // Normal
-                { color: "#1E3A8A" }, // High Humidity
+                { limit: 30, color: "#93C5FD" },
+                { limit: 70, color: "#3B82F6" },
+                { color: "#1E3A8A" },
               ],
             }}
             labels={{
-              valueLabel: { hide: true },
-              tickLabels: {
-                hideMinMax: true,
-                ticks: [],
+              valueLabel: {
+                hide: true,
               },
-            }}
-            pointer={{
-              type: "needle",
-              elastic: true,
-              color: "#464646",
+              // tickLabels: {
+              //   hideMinMax: false, // Set ke true jika ingin sembunyikan angka 0 dan 100 juga
+              // },
             }}
           />
-
           <div
-            className="text-6xl font-black transition-colors duration-500"
-            style={{ color: currentHumColor }}
+            className="my-4 text-5xl font-black"
+            style={{ color: getHumColor(data.hum) }}
           >
             {data.hum}
-            <span className="ml-1 text-2xl">%</span>
+            <span className="text-xl">%</span>
           </div>
-          <div className="mt-4 h-40 w-full">
+          <div className="h-40 w-full">
             <Line
               data={{
-                labels: (history || []).map((h) =>
+                labels: history.map((h) =>
                   new Date(h.timestamp).toLocaleTimeString([], {
                     hour: "2-digit",
                     minute: "2-digit",
@@ -317,8 +272,7 @@ export default function DisplayData({
                 ),
                 datasets: [
                   {
-                    label: "Humidity Trend",
-                    data: (history || []).map((h) => h.hum),
+                    data: history.map((h) => h.hum),
                     borderColor: "#1E88E5",
                     backgroundColor: "rgba(30, 136, 229, 0.1)",
                     fill: true,
@@ -327,26 +281,7 @@ export default function DisplayData({
                   },
                 ],
               }}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                  x: {
-                    ticks: { maxTicksLimit: 5, font: { size: 10 } },
-                    grid: { display: false },
-                  },
-                  y: {
-                    ticks: {
-                      font: { size: 10 },
-                      callback: (value) => `${value}%`,
-                    },
-                    min: 0,
-                    max: 100,
-                  },
-                },
-                animation: { duration: 0 },
-              }}
+              options={lineChartOptions}
             />
           </div>
         </Card>

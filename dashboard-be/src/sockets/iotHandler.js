@@ -31,36 +31,51 @@ const initIoTHandler = (io) => {
         status: alarmStatus,
         timestamp: new Date(),
       });
-
-      // // 3. Perbaiki bagian ini: Gunakan variabel alarmStatus, bukan string "online" manual
-      // io.emit("room-status-update", {
-      //   id: updatedRoom._id || updatedRoom.value?._id, // Penanganan jika return findOneAndUpdate berbeda
-      //   room_id,
-      //   status: alarmStatus,
-      //   timestamp: new Date(),
-      // });
     } catch (err) {
       console.error("ERROR: IoT Handler Error:", err.message);
     }
   });
 
   setInterval(async () => {
-    const rooms = await getAllRooms();
-    const now = new Date();
-    rooms.forEach((room) => {
-      if (room.last_reading?.timestamp) {
-        const diff = (now - new Date(room.last_reading.timestamp)) / 1000 / 60;
-        if (diff > 1) {
-          io.emit("room-status-update", {
-            id: room._id,
-            room_id: room.room_id,
-            status: "Disconnected", // Sesuai dengan type RoomStatus di Frontend
-            timestamp: room.last_reading.timestamp,
-          });
+    try {
+      const rooms = await getAllRooms();
+      const now = new Date();
+
+      rooms.forEach((room) => {
+        if (room.last_reading?.timestamp) {
+          const lastReadingTs = new Date(room.last_reading.timestamp);
+          const diffInSeconds = (now - lastReadingTs) / 1000;
+
+          // Jika tidak ada data lebih dari 30 detik (lebih responsif)
+          if (diffInSeconds > 30) {
+            const room_id = room.room_id;
+            const timestamp = new Date();
+
+            // Kirim status Disconnected
+            io.emit("room-status-update", {
+              id: room._id,
+              room_id: room_id,
+              status: "Disconnected",
+              timestamp: timestamp,
+            });
+
+            // Kirim data 0 agar line plot bergerak turun ke bawah
+            const offlinePayload = {
+              room_id: room_id,
+              temp: 0,
+              hum: 0,
+              timestamp: timestamp,
+            };
+
+            io.emit("sensor-update", offlinePayload);
+            io.emit(`sensor-update-${room_id}`, offlinePayload);
+          }
         }
-      }
-    });
-  }, 60000);
+      });
+    } catch (err) {
+      console.error("Error in Offline Interval:", err.message);
+    }
+  }, 10000);
 };
 
 module.exports = initIoTHandler;
