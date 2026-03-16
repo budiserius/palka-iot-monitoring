@@ -3,6 +3,7 @@ import { FaAngleUp } from "react-icons/fa";
 import Button from "./atoms/Button";
 import { useState, useEffect } from "react";
 import { socket } from "@/lib/socket";
+import { MdLink, MdLinkOff, MdOutlineWarningAmber } from "react-icons/md";
 
 type RoomStatus =
   | "Connected"
@@ -26,6 +27,29 @@ export default function ListRoom({
   const [isRollUp, setIsRollUp] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
 
+  const statusStyles: Record<RoomStatus, string> = {
+    Connected: "text-green-500",
+    Disconnected: "text-gray-500",
+    "Warning Level 1": "text-orange-400 animate-pulse",
+    "Warning Level 2": "text-orange-600 animate-pulse",
+    Emergency: "text-red-600 animate-ping",
+  };
+
+  const StatusIcon = ({ status }: { status: RoomStatus }) => {
+    switch (status) {
+      case "Connected":
+        return <MdLink className={`text-xl ${statusStyles[status]}`} />;
+      case "Disconnected":
+        return <MdLinkOff className={`text-xl ${statusStyles[status]}`} />;
+      default:
+        // Warning Level 1, 2, dan Emergency menggunakan ikon yang sama
+        return (
+          <MdOutlineWarningAmber
+            className={`text-xl ${statusStyles[status]}`}
+          />
+        );
+    }
+  };
   const statusColors: Record<RoomStatus, string> = {
     Connected: "bg-green-500",
     Disconnected: "bg-gray-500",
@@ -136,13 +160,8 @@ export default function ListRoom({
               >
                 <Button onClick={() => onSelectRoom(room.room_id)}>
                   <span className="truncate">{room.room_id}</span>
-                  <div
-                    className={
-                      "aspect-square h-2 w-2 shrink-0 rounded-full " +
-                      statusColors[room.status]
-                    }
-                    title={room.status}
-                  />
+                  {/* Panggil komponen Ikon di sini */}
+                  <StatusIcon status={room.status} />
                 </Button>
               </div>
             ))
@@ -154,9 +173,9 @@ export default function ListRoom({
       <div className="mt-auto max-md:hidden">
         <p className="mb-2 border-b font-bold">Status Legend</p>
         <ul className="space-y-2">
-          {Object.entries(statusColors).map(([label, color]) => (
+          {Object.keys(statusStyles).map((label) => (
             <li key={label} className="flex items-center gap-3 text-sm">
-              <div className={`aspect-square h-2 w-2 rounded-full ${color}`} />
+              <StatusIcon status={label as RoomStatus} />
               <p>{label}</p>
             </li>
           ))}
