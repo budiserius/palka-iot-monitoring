@@ -50,16 +50,11 @@ export default function ListRoom({
         );
     }
   };
-  const statusColors: Record<RoomStatus, string> = {
-    Connected: "bg-green-500",
-    Disconnected: "bg-gray-500",
-    "Warning Level 1": "bg-orange-400 animate-pulse", // Level 1: Oranye berkedip
-    "Warning Level 2": "bg-orange-600 animate-pulse", // Level 2: Oranye tua berkedip
-    Emergency: "bg-red-600 animate-ping", // Emergency: Merah berdenyut kencang
-  };
+
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   useEffect(() => {
-    fetch(`http://localhost:4000/api/rooms`)
+    fetch(`${backendUrl}/api/rooms`)
       .then((res) => res.json())
       .then((data: any[]) => {
         const formattedRooms: Room[] = data.map((item) => {

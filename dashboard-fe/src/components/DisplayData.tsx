@@ -23,6 +23,8 @@ ChartJS.register(
   Legend,
 );
 
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+
 import dynamic from "next/dynamic";
 const GaugeComponent = dynamic(() => import("react-gauge-component"), {
   ssr: false,
@@ -55,8 +57,8 @@ export default function DisplayData({
     const fetchData = async () => {
       try {
         const [resRooms, resTrend] = await Promise.all([
-          fetch(`http://localhost:4000/api/rooms`),
-          fetch(`http://localhost:4000/api/rooms/${selectedRoomId}/trend`),
+          fetch(`${backendUrl}/api/rooms`),
+          fetch(`${backendUrl}/api/rooms/${selectedRoomId}/trend`),
         ]);
 
         const rooms = await resRooms.json();
