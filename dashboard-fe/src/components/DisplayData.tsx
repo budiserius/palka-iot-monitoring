@@ -32,7 +32,7 @@ type CardProps = { children: ReactNode };
 
 function Card({ children }: CardProps) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-md border bg-white p-6 shadow-sm">
+    <div className="flex flex-col items-center justify-center rounded-md border bg-white p-6 shadow-sm dark:bg-black">
       {children}
     </div>
   );
@@ -143,9 +143,10 @@ export default function DisplayData({
   // --- Logika Warna & Config (Tetap Sama) ---
   const getTempColor = (temp: any) => {
     if (temp <= 0) return "#9ca3af"; // Abu-abu jika sensor mati
-    if (temp <= 20) return "#5BE12C";
-    if (temp <= 40) return "#F5CD19";
-    return "#EA4228";
+    if (temp <= 55) return "#5BE12C";
+    if (temp <= 60) return "#FB923C";
+    if (temp <= 65) return "#EA580C";
+    return "#DC2626";
   };
 
   const getHumColor = (hum: any) => {
