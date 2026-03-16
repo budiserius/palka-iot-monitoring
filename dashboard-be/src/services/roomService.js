@@ -56,4 +56,32 @@ const getRoomTrend = async (room_id) => {
   return results;
 };
 
-module.exports = { updateRoomStatus, getAllRooms, getRoomTrend };
+const logSensorData = async (room_id, payload) => {
+  const db = getDB();
+  const now = new Date();
+
+  // Format tanggal YYYY-MM-DD
+  const dateStr = now.toISOString().split("T")[0];
+  const currentHour = now.getHours();
+
+  return await db.collection("sensor_logs").updateOne(
+    {
+      room_id,
+      date: dateStr,
+      hour: currentHour,
+    },
+    {
+      $push: {
+        measurements: {
+          t: payload.temp,
+          h: payload.hum,
+          ts: now,
+        },
+      },
+      $inc: { count: 1 }, // Menambah jumlah count secara otomatis
+    },
+    { upsert: true },
+  );
+};
+
+module.exports = { updateRoomStatus, getAllRooms, getRoomTrend, logSensorData };

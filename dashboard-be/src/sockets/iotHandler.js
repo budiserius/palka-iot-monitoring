@@ -21,6 +21,8 @@ const initIoTHandler = (io) => {
       else if (temp >= 60 && temp < 65) alarmStatus = "Warning Level 2";
       else if (temp >= 65) alarmStatus = "Emergency";
 
+      await logSensorData(room_id, payload);
+
       const updatedRoom = await updateRoomStatus(room_id, payload);
 
       io.emit("sensor-update", { room_id, ...payload, timestamp: new Date() });
