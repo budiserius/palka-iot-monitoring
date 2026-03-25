@@ -1,29 +1,21 @@
-// dashboard-be/src/index.js
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const { connectDB } = require("./config/database");
+const { connectDB } = require("./config/db");
 const roomRoutes = require("./routes/roomRoutes");
-const initIoTHandler = require("./sockets/iotHandler");
+const initIoT = require("./sockets/iotHandler");
 
 const app = express();
-const httpServer = http.createServer(app);
-const io = new Server(httpServer, { cors: { origin: "*" } });
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(cors());
 app.use(express.json());
 app.use("/api/rooms", roomRoutes);
 
-const startServer = async () => {
+(async () => {
   await connectDB();
-
-  initIoTHandler(io);
-
-  const PORT = process.env.PORT || 4000;
-  httpServer.listen(PORT, () => {
-    console.log(`INFO: Server running on port ${PORT}`);
-  });
-};
-
-startServer();
+  initIoT(io);
+  server.listen(4000, () => console.log("Server running on port 4000"));
+})();
