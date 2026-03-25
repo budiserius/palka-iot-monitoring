@@ -7,11 +7,12 @@ import { MdLink, MdLinkOff, MdOutlineWarningAmber } from "react-icons/md";
 import toast, { Toaster } from "react-hot-toast";
 
 type RoomStatus =
-  | "Connected"
-  | "Disconnected"
-  | "Warning Level 1"
-  | "Warning Level 2"
-  | "Emergency";
+  | "Safe"
+  | "Low Risk"
+  | "Moderate Risk"
+  | "High Risk"
+  | "Critical"
+  | "Disconnected";
 
 interface Room {
   id: string;
@@ -31,13 +32,13 @@ export default function ListRoom({
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const statusStyles: Record<RoomStatus, string> = {
-    Connected: "text-green-500",
+    Safe: "text-green-500",
+    "Low Risk": "text-blue-400",
+    "Moderate Risk": "text-yellow-500 animate-pulse",
+    "High Risk": "text-orange-600 animate-pulse",
+    Critical: "text-red-600 animate-ping",
     Disconnected: "text-gray-500",
-    "Warning Level 1": "text-orange-400 animate-pulse",
-    "Warning Level 2": "text-orange-600 animate-pulse",
-    Emergency: "text-red-600 animate-ping",
   };
-
   const triggerAlert = (room: string, status: RoomStatus) => {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(`⚠️ BAHAYA: ${room}`, {
@@ -72,7 +73,8 @@ export default function ListRoom({
 
   const StatusIcon = ({ status }: { status: RoomStatus }) => {
     switch (status) {
-      case "Connected":
+      case "Safe":
+      case "Low Risk":
         return <MdLink className={`text-xl ${statusStyles[status]}`} />;
       case "Disconnected":
         return <MdLinkOff className={`text-xl ${statusStyles[status]}`} />;
@@ -102,11 +104,9 @@ export default function ListRoom({
 
           let initialStatus: RoomStatus = "Disconnected";
           if (!isTimeout) {
-            if (temp >= 65) initialStatus = "Emergency";
-            else if (temp >= 60) initialStatus = "Warning Level 2";
-            else if (temp >= 55) initialStatus = "Warning Level 1";
-            else initialStatus = "Connected";
+            initialStatus = (item.status || "Safe") as RoomStatus;
           }
+
           lastStatusRef.current[item.room_id] = initialStatus;
           return {
             id: item._id,
@@ -121,11 +121,12 @@ export default function ListRoom({
     socket.on("room-status-update", (data) => {
       const newStatus = data.status as RoomStatus;
       const prevStatus = lastStatusRef.current[data.room_id];
-      const isDanger = [
-        "Warning Level 1",
-        "Warning Level 2",
-        "Emergency",
-      ].includes(newStatus);
+      const dangerLevels: RoomStatus[] = [
+        "Moderate Risk",
+        "High Risk",
+        "Critical",
+      ];
+      const isDanger = dangerLevels.includes(newStatus);
 
       if (isDanger && newStatus !== prevStatus) {
         triggerAlert(data.room_id, newStatus);
