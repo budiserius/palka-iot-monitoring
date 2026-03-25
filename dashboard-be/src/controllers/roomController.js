@@ -30,3 +30,12 @@ exports.getRoomTrend = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+exports.deleteAlarm = async (req, res) => {
+  try {
+    await repo.deleteAlarmLogById(req.params.id);
+    res.json({ message: "Alarm deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

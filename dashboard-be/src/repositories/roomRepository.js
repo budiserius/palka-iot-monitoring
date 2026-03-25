@@ -50,6 +50,13 @@ const getSensorLogsByRoom = (room_id, sinceDate) =>
     ])
     .toArray();
 
+const deleteAlarmLogById = (id) =>
+  getDB()
+    .collection("alarm_logs")
+    .deleteOne({ _id: new (require("mongodb").ObjectId)(id) });
+
+const clearAllAlarmLogs = () => getDB().collection("alarm_logs").deleteMany({});
+
 module.exports = {
   findRooms,
   updateRoomData,
@@ -57,4 +64,6 @@ module.exports = {
   getAlarmLogs,
   pushSensorLog,
   getSensorLogsByRoom,
+  deleteAlarmLogById,
+  clearAllAlarmLogs,
 };

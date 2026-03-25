@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
-const socket: Socket = io("http://localhost:4000");
+const socket: Socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`);
 
 interface AlarmLog {
   id: string | number;
@@ -10,23 +10,47 @@ interface AlarmLog {
   timestamp: string;
 }
 
-interface SocketData {
-  room_id: string;
-  status: string;
-  timestamp: string | Date;
-}
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export default function LogAlarmSection() {
   const [logs, setLogs] = useState<AlarmLog[]>([]);
 
+  const deleteLog = async (id: string | number) => {
+    // 1. Tampilkan Konfirmasi Bawaan Browser
+    const isConfirmed = window.confirm(
+      "Apakah Anda yakin ingin menghapus log alarm ini?",
+    );
+
+    if (!isConfirmed) return; // Batalkan jika user klik 'Cancel'
+
+    try {
+      const response = await fetch(`${backendUrl}/api/rooms/alarms/${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        // 2. Jika Berhasil: Update State & Beri Alert
+        setLogs((prev) => prev.filter((log) => log.id !== id));
+        alert("✅ Log alarm berhasil dihapus!");
+      } else {
+        // 3. Jika Gagal dari sisi Server (misal ID tidak ditemukan)
+        const errorData = await response.json();
+        alert(
+          `❌ Gagal menghapus: ${errorData.error || "Terjadi kesalahan server"}`,
+        );
+      }
+    } catch (err) {
+      // 4. Jika Gagal Koneksi/Network
+      console.error("Delete failed", err);
+      alert("❌ Gagal terhubung ke server. Pastikan backend menyala.");
+    }
+  };
+
   useEffect(() => {
     const fetchAlarmHistory = async () => {
       try {
-        const response = await fetch(
-          "http://localhost:4000/api/rooms/all/alarms",
-        );
+        const response = await fetch(`${backendUrl}/api/rooms/alarms`);
 
-        // Cek jika response bukan JSON (misal error 404 HTML)
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -48,24 +72,26 @@ export default function LogAlarmSection() {
 
     fetchAlarmHistory();
 
-    socket.on("room-status-update", (data: SocketData) => {
+    socket.on("new-alarm", (data: any) => {
       setLogs((prevLogs) => {
-        const displayStatus =
-          data.status === "Connected" ? "Normal" : data.status;
-
         const newLog: AlarmLog = {
-          id: Date.now(),
+          id: data._id, // Gunakan ID dari MongoDB
           room_id: data.room_id,
-          status: displayStatus,
+          status: data.status === "Connected" ? "Normal" : data.status,
           timestamp: new Date(data.timestamp).toLocaleTimeString(),
         };
-
         return [newLog, ...prevLogs].slice(0, 50);
       });
     });
 
+    // Listener untuk sinkronisasi jika user lain menghapus alarm (Opsional)
+    socket.on("alarm-deleted", (deletedId: string) => {
+      setLogs((prev) => prev.filter((log) => log.id !== deletedId));
+    });
+
     return () => {
-      socket.off("room-status-update");
+      socket.off("new-alarm");
+      socket.off("alarm-deleted");
     };
   }, []);
 
@@ -88,15 +114,24 @@ export default function LogAlarmSection() {
           logs.map((log) => (
             <div
               key={log.id}
-              className="animate-in fade-in slide-in-from-right-4 border-b border-gray-100 pb-2 duration-300"
+              className="group relative border-b border-gray-100 pb-2"
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">
                   Room: {log.room_id}
                 </span>
-                <span className="text-[10px] text-gray-400">
-                  {log.timestamp}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-400">
+                    {log.timestamp}
+                  </span>
+                  {/* Tombol Delete muncul saat hover */}
+                  <button
+                    onClick={() => deleteLog(log.id)}
+                    className="text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
               <p
                 className={`text-xs font-medium ${getStatusColor(log.status)}`}

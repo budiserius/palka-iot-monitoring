@@ -22,13 +22,20 @@ module.exports = (io) => {
 
     // Cek Perubahan Status
     if (lastKnownStatus[room_id] !== currentStatus) {
-      await repo.insertAlarmLog({
+      const alarmEntry = {
         room_id,
         status: currentStatus,
         value: payload.temp,
         timestamp: new Date(),
-      });
+      };
+
+      const result = await repo.insertAlarmLog(alarmEntry);
       lastKnownStatus[room_id] = currentStatus;
+
+      io.emit("new-alarm", {
+        _id: result.insertedId, // Kirim ID asli dari DB untuk kebutuhan Delete nanti
+        ...alarmEntry,
+      });
 
       io.emit("room-status-update", {
         room_id,
