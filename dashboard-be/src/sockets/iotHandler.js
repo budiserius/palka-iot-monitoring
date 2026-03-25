@@ -3,6 +3,7 @@ const repo = require("../repositories/roomRepository");
 const {
   getAlarmStatus,
   processSensorData,
+  calculateRiskStatus,
 } = require("../services/roomService");
 
 let lastKnownStatus = {};
@@ -18,13 +19,15 @@ module.exports = (io) => {
   mqttClient.on("message", async (topic, message) => {
     const room_id = topic.split("/")[1];
     const payload = JSON.parse(message.toString());
-    const currentStatus = getAlarmStatus(payload.temp);
+
+    const currentStatus = calculateRiskStatus(payload.temp, payload.hum);
 
     if (lastKnownStatus[room_id] !== currentStatus) {
       const alarmEntry = {
         room_id,
         status: currentStatus,
         value: payload.temp,
+        humidity: payload.hum,
         timestamp: new Date(),
       };
 
