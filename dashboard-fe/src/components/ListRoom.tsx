@@ -27,9 +27,8 @@ export default function ListRoom({
 }) {
   const [isRollUp, setIsRollUp] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [alertQueue, setAlertQueue] = useState<any[]>([]);
-
   const lastStatusRef = useRef<Record<string, RoomStatus>>({});
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const statusStyles: Record<RoomStatus, string> = {
     Connected: "text-green-500",
@@ -39,13 +38,36 @@ export default function ListRoom({
     Emergency: "text-red-600 animate-ping",
   };
 
-  const triggerNativeNotification = (room: string, status: string) => {
+  const triggerAlert = (room: string, status: RoomStatus) => {
     if ("Notification" in window && Notification.permission === "granted") {
-      new Notification(`⚠️ BAHAYA TERDETEKSI`, {
-        body: `Ruangan ${room} berstatus: ${status}`,
-        icon: "/warning-icon.png", // opsional
+      new Notification(`⚠️ BAHAYA: ${room}`, {
+        body: `Status saat ini: ${status}`,
       });
     }
+
+    toast.error(
+      (t) => (
+        <span className="flex flex-col gap-1">
+          <b className="font-bold">Bahaya Terdeteksi!</b>
+          <span className="text-sm">
+            Ruangan {room} berstatus {status}
+          </span>
+          <button
+            onClick={() => {
+              onSelectRoom(room);
+              toast.dismiss(t.id);
+            }}
+            className="mt-2 w-fit rounded bg-red-600 px-2 py-1 text-xs text-white"
+          >
+            Lihat Detail
+          </button>
+        </span>
+      ),
+      {
+        duration: 6000,
+        id: `alert-${room}`,
+      },
+    );
   };
 
   const StatusIcon = ({ status }: { status: RoomStatus }) => {
@@ -63,8 +85,6 @@ export default function ListRoom({
     }
   };
 
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
@@ -73,7 +93,7 @@ export default function ListRoom({
     fetch(`${backendUrl}/api/rooms`)
       .then((res) => res.json())
       .then((data: any[]) => {
-        const formattedRooms: Room[] = data.map((item) => {
+        const formattedRooms = data.map((item) => {
           const temp = item.last_reading?.temp || 0;
           const lastTs = item.last_reading?.timestamp;
           const isTimeout =
@@ -87,9 +107,7 @@ export default function ListRoom({
             else if (temp >= 55) initialStatus = "Warning Level 1";
             else initialStatus = "Connected";
           }
-
           lastStatusRef.current[item.room_id] = initialStatus;
-
           return {
             id: item._id,
             room_id: item.room_id,
@@ -103,7 +121,6 @@ export default function ListRoom({
     socket.on("room-status-update", (data) => {
       const newStatus = data.status as RoomStatus;
       const prevStatus = lastStatusRef.current[data.room_id];
-
       const isDanger = [
         "Warning Level 1",
         "Warning Level 2",
@@ -111,17 +128,13 @@ export default function ListRoom({
       ].includes(newStatus);
 
       if (isDanger && newStatus !== prevStatus) {
-        setAlertQueue((prev) => [
-          ...prev,
-          { room_id: data.room_id, status: newStatus },
-        ]);
+        triggerAlert(data.room_id, newStatus);
       }
 
       lastStatusRef.current[data.room_id] = newStatus;
 
       setRooms((prevRooms) => {
         const roomExists = prevRooms.find((r) => r.room_id === data.room_id);
-
         if (roomExists) {
           return prevRooms.map((room) =>
             room.room_id === data.room_id
@@ -133,29 +146,32 @@ export default function ListRoom({
                 }
               : room,
           );
-        } else {
-          return [
-            ...prevRooms,
-            {
-              id: data.id,
-              room_id: data.room_id,
-              status: newStatus,
-              last_active: data.timestamp,
-            },
-          ];
         }
+        return [
+          ...prevRooms,
+          {
+            id: data.id,
+            room_id: data.room_id,
+            status: newStatus,
+            last_active: data.timestamp,
+          },
+        ];
       });
     });
 
-    // Bersihkan listener saat komponen tidak lagi digunakan
     return () => {
       socket.off("room-status-update");
     };
-  }, []);
+  }, [backendUrl]);
 
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: { borderRadius: "8px", background: "#333", color: "#fff" },
+        }}
+      />
       <div className="w-60 p-6 max-md:absolute max-md:bottom-0 max-md:w-full max-md:border-t md:flex md:h-[calc(100vh-120px)] md:flex-col md:justify-between md:border-r">
         <div onClick={() => setIsRollUp(!isRollUp)}>
           <h2 className="flex cursor-pointer justify-between text-2xl font-bold">
@@ -177,12 +193,11 @@ export default function ListRoom({
             ) : (
               rooms.map((room) => (
                 <div
-                  key={room.id}
+                  key={room.room_id}
                   className="max-md:flex max-md:w-full max-md:justify-center"
                 >
                   <Button onClick={() => onSelectRoom(room.room_id)}>
                     <span className="truncate">{room.room_id}</span>
-                    {/* Panggil komponen Ikon di sini */}
                     <StatusIcon status={room.status} />
                   </Button>
                 </div>
@@ -191,7 +206,6 @@ export default function ListRoom({
           </div>
         </div>
 
-        {/* Information Panel */}
         <div className="mt-auto max-md:hidden">
           <p className="mb-2 border-b font-bold">Status Legend</p>
           <ul className="space-y-2">
