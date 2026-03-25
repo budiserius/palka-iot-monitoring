@@ -57,6 +57,9 @@ const deleteAlarmLogById = (id) =>
 
 const clearAllAlarmLogs = () => getDB().collection("alarm_logs").deleteMany({});
 
+const findAllAlarmLogs = () =>
+  getDB().collection("alarm_logs").find({}).sort({ timestamp: -1 }).toArray();
+
 module.exports = {
   findRooms,
   updateRoomData,
@@ -66,4 +69,5 @@ module.exports = {
   getSensorLogsByRoom,
   deleteAlarmLogById,
   clearAllAlarmLogs,
+  findAllAlarmLogs,
 };
