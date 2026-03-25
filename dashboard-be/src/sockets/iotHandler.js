@@ -20,7 +20,6 @@ module.exports = (io) => {
     const payload = JSON.parse(message.toString());
     const currentStatus = getAlarmStatus(payload.temp);
 
-    // Cek Perubahan Status
     if (lastKnownStatus[room_id] !== currentStatus) {
       const alarmEntry = {
         room_id,
@@ -33,7 +32,7 @@ module.exports = (io) => {
       lastKnownStatus[room_id] = currentStatus;
 
       io.emit("new-alarm", {
-        _id: result.insertedId, // Kirim ID asli dari DB untuk kebutuhan Delete nanti
+        _id: result.insertedId,
         ...alarmEntry,
       });
 
@@ -48,7 +47,6 @@ module.exports = (io) => {
     io.emit("sensor-update", { room_id, ...payload, timestamp: new Date() });
   });
 
-  // Check Offline Devices (Every 10s)
   setInterval(async () => {
     const rooms = await repo.findRooms();
     const now = new Date();

@@ -12,14 +12,6 @@ interface AlarmLog {
   timestamp: string;
 }
 
-interface AlarmLogData {
-  id: string | number;
-  room_id: string;
-  status: string;
-  value: number;
-  timestamp: string;
-}
-
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export default function LogAlarmSection() {
@@ -27,7 +19,7 @@ export default function LogAlarmSection() {
 
   const deleteLog = async (id: string | number) => {
     const isConfirmed = window.confirm(
-      "Apakah Anda yakin ingin menghapus log alarm ini?",
+      "Do you really want to delete this alarm log",
     );
 
     if (!isConfirmed) return; // Batalkan jika user klik 'Cancel'
@@ -39,35 +31,36 @@ export default function LogAlarmSection() {
 
       if (response.ok) {
         setLogs((prev) => prev.filter((log) => log.id !== id));
-        alert("✅ Log alarm berhasil dihapus!");
+        alert("Alarm log deleted successfully!");
       } else {
         const errorData = await response.json();
         alert(
-          `❌ Gagal menghapus: ${errorData.error || "Terjadi kesalahan server"}`,
+          `Failed to delete: ${errorData.error || "An internal server error occurred."}`,
         );
       }
     } catch (err) {
       console.error("Delete failed", err);
-      alert("❌ Gagal terhubung ke server. Pastikan backend menyala.");
+      alert(
+        "Failed to connect to the server. Make sure the backend is running.",
+      );
     }
   };
 
   const downloadLogs = async () => {
     try {
       const response = await fetch(`${backendUrl}/api/rooms/alarms`);
-      if (!response.ok) throw new Error("Gagal mengambil data untuk download");
+      if (!response.ok)
+        throw new Error("Failed to retrieve data for download.");
 
       const data = await response.json();
 
       if (data.length === 0) {
-        alert("⚠️ Tidak ada data log untuk didownload.");
+        alert("There is no log data available for download.");
         return;
       }
 
-      // 1. Definisikan Header CSV
-      const headers = ["ID Ruangan", "Status", "Nilai", "Waktu"];
+      const headers = ["Room ID", "Status", "Value", "Timestamp"];
 
-      // 2. Map data ke baris CSV
       const rows = data.map((log: any) => [
         log.room_id,
         log.status,
@@ -75,13 +68,11 @@ export default function LogAlarmSection() {
         new Date(log.timestamp).toLocaleString(),
       ]);
 
-      // 3. Gabungkan Header dan Baris
       const csvContent = [
         headers.join(","),
         ...rows.map((row: any) => row.join(",")),
       ].join("\n");
 
-      // 4. Buat Blob dan Link Download
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -97,10 +88,10 @@ export default function LogAlarmSection() {
       link.click();
       document.body.removeChild(link);
 
-      alert("✅ File CSV berhasil diunduh!");
+      alert("CSV file downloaded successfully!");
     } catch (err) {
       console.error("Download failed:", err);
-      alert("❌ Gagal mendownload log.");
+      alert("Fail download log.");
     }
   };
 
@@ -133,7 +124,7 @@ export default function LogAlarmSection() {
     socket.on("new-alarm", (data: any) => {
       setLogs((prevLogs) => {
         const newLog: AlarmLog = {
-          id: data._id, // Gunakan ID dari MongoDB
+          id: data._id,
           room_id: data.room_id,
           status: data.status === "Connected" ? "Normal" : data.status,
           timestamp: new Date(data.timestamp).toLocaleTimeString(),
@@ -142,7 +133,6 @@ export default function LogAlarmSection() {
       });
     });
 
-    // Listener untuk sinkronisasi jika user lain menghapus alarm (Opsional)
     socket.on("alarm-deleted", (deletedId: string) => {
       setLogs((prev) => prev.filter((log) => log.id !== deletedId));
     });
@@ -184,7 +174,6 @@ export default function LogAlarmSection() {
                   <span className="text-[10px] text-gray-400">
                     {log.timestamp}
                   </span>
-                  {/* Tombol Delete muncul saat hover */}
                   <button
                     onClick={() => deleteLog(log.id)}
                     className="text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-600"
