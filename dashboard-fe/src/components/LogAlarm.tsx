@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import Button from "./atoms/Button";
+import { FaCloudDownloadAlt } from "react-icons/fa";
 
 const socket: Socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`);
 
@@ -10,13 +12,20 @@ interface AlarmLog {
   timestamp: string;
 }
 
+interface AlarmLogData {
+  id: string | number;
+  room_id: string;
+  status: string;
+  value: number;
+  timestamp: string;
+}
+
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export default function LogAlarmSection() {
   const [logs, setLogs] = useState<AlarmLog[]>([]);
 
   const deleteLog = async (id: string | number) => {
-    // 1. Tampilkan Konfirmasi Bawaan Browser
     const isConfirmed = window.confirm(
       "Apakah Anda yakin ingin menghapus log alarm ini?",
     );
@@ -29,20 +38,69 @@ export default function LogAlarmSection() {
       });
 
       if (response.ok) {
-        // 2. Jika Berhasil: Update State & Beri Alert
         setLogs((prev) => prev.filter((log) => log.id !== id));
         alert("✅ Log alarm berhasil dihapus!");
       } else {
-        // 3. Jika Gagal dari sisi Server (misal ID tidak ditemukan)
         const errorData = await response.json();
         alert(
           `❌ Gagal menghapus: ${errorData.error || "Terjadi kesalahan server"}`,
         );
       }
     } catch (err) {
-      // 4. Jika Gagal Koneksi/Network
       console.error("Delete failed", err);
       alert("❌ Gagal terhubung ke server. Pastikan backend menyala.");
+    }
+  };
+
+  const downloadLogs = async () => {
+    try {
+      const response = await fetch(`${backendUrl}/api/rooms/alarms`);
+      if (!response.ok) throw new Error("Gagal mengambil data untuk download");
+
+      const data = await response.json();
+
+      if (data.length === 0) {
+        alert("⚠️ Tidak ada data log untuk didownload.");
+        return;
+      }
+
+      // 1. Definisikan Header CSV
+      const headers = ["ID Ruangan", "Status", "Nilai", "Waktu"];
+
+      // 2. Map data ke baris CSV
+      const rows = data.map((log: any) => [
+        log.room_id,
+        log.status,
+        log.value || 0,
+        new Date(log.timestamp).toLocaleString(),
+      ]);
+
+      // 3. Gabungkan Header dan Baris
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row: any) => row.join(",")),
+      ].join("\n");
+
+      // 4. Buat Blob dan Link Download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.setAttribute("href", url);
+      link.setAttribute(
+        "download",
+        `log_alarm_${new Date().toISOString().split("T")[0]}.csv`,
+      );
+      link.style.visibility = "hidden";
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      alert("✅ File CSV berhasil diunduh!");
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("❌ Gagal mendownload log.");
     }
   };
 
@@ -105,7 +163,9 @@ export default function LogAlarmSection() {
 
   return (
     <div className="w-80 p-6 max-md:bottom-0 max-md:hidden max-md:w-full max-md:border-t md:flex md:h-[calc(100vh-120px)] md:flex-col md:border-l">
-      <h2 className="mb-4 border-b pb-2 text-2xl font-bold">Log Alarm</h2>
+      <h2 className="mb-4 border-b pb-2 text-2xl font-bold">
+        Log Alarm <FaCloudDownloadAlt onClick={downloadLogs} />
+      </h2>
 
       <div className="scrollbar-thin scrollbar-thumb-gray-300 flex-1 space-y-3 overflow-y-auto pr-2">
         {logs.length === 0 ? (
