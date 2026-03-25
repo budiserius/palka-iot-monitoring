@@ -3,6 +3,7 @@ const repo = require("../repositories/roomRepository");
 const {
   getAlarmStatus,
   processSensorData,
+  calculateRiskStatus,
 } = require("../services/roomService");
 
 let lastKnownStatus = {};
@@ -18,14 +19,15 @@ module.exports = (io) => {
   mqttClient.on("message", async (topic, message) => {
     const room_id = topic.split("/")[1];
     const payload = JSON.parse(message.toString());
-    const currentStatus = getAlarmStatus(payload.temp);
 
-    // Cek Perubahan Status
+    const currentStatus = calculateRiskStatus(payload.temp, payload.hum);
+
     if (lastKnownStatus[room_id] !== currentStatus) {
       const alarmEntry = {
         room_id,
         status: currentStatus,
         value: payload.temp,
+        humidity: payload.hum,
         timestamp: new Date(),
       };
 
@@ -33,7 +35,7 @@ module.exports = (io) => {
       lastKnownStatus[room_id] = currentStatus;
 
       io.emit("new-alarm", {
-        _id: result.insertedId, // Kirim ID asli dari DB untuk kebutuhan Delete nanti
+        _id: result.insertedId,
         ...alarmEntry,
       });
 
@@ -48,7 +50,6 @@ module.exports = (io) => {
     io.emit("sensor-update", { room_id, ...payload, timestamp: new Date() });
   });
 
-  // Check Offline Devices (Every 10s)
   setInterval(async () => {
     const rooms = await repo.findRooms();
     const now = new Date();

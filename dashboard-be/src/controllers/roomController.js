@@ -24,7 +24,8 @@ exports.getAlarms = async (req, res) => {
 exports.getRoomTrend = async (req, res) => {
   try {
     const { room_id } = req.params;
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - 1 * 60 * 60 * 1000);
     const data = await repo.getSensorLogsByRoom(room_id, oneDayAgo);
     res.json(data);
   } catch (err) {

@@ -7,11 +7,12 @@ import { MdLink, MdLinkOff, MdOutlineWarningAmber } from "react-icons/md";
 import toast, { Toaster } from "react-hot-toast";
 
 type RoomStatus =
-  | "Connected"
-  | "Disconnected"
-  | "Warning Level 1"
-  | "Warning Level 2"
-  | "Emergency";
+  | "Safe"
+  | "Low Risk"
+  | "Moderate Risk"
+  | "High Risk"
+  | "Critical"
+  | "Disconnected";
 
 interface Room {
   id: string;
@@ -31,13 +32,13 @@ export default function ListRoom({
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const statusStyles: Record<RoomStatus, string> = {
-    Connected: "text-green-500",
+    Safe: "text-green-500",
+    "Low Risk": "text-blue-400",
+    "Moderate Risk": "text-yellow-500 animate-pulse",
+    "High Risk": "text-orange-600 animate-pulse",
+    Critical: "text-red-600 animate-ping",
     Disconnected: "text-gray-500",
-    "Warning Level 1": "text-orange-400 animate-pulse",
-    "Warning Level 2": "text-orange-600 animate-pulse",
-    Emergency: "text-red-600 animate-ping",
   };
-
   const triggerAlert = (room: string, status: RoomStatus) => {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(`⚠️ BAHAYA: ${room}`, {
@@ -47,21 +48,19 @@ export default function ListRoom({
 
     toast.error(
       (t) => (
-        <span className="flex flex-col gap-1">
-          <b className="font-bold">Bahaya Terdeteksi!</b>
-          <span className="text-sm">
-            Ruangan {room} berstatus {status}
-          </span>
-          <button
-            onClick={() => {
-              onSelectRoom(room);
-              toast.dismiss(t.id);
-            }}
-            className="mt-2 w-fit rounded bg-red-600 px-2 py-1 text-xs text-white"
-          >
-            Lihat Detail
-          </button>
-        </span>
+        <>
+          <div className="flex items-center justify-between rounded bg-red-600 px-3 py-2 text-white">
+            <span className="text-sm font-medium">
+              Danger Detected: Room {room} is {status}.
+            </span>
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="ml-2 font-bold text-white"
+            >
+              ✕
+            </button>
+          </div>
+        </>
       ),
       {
         duration: 6000,
@@ -72,7 +71,8 @@ export default function ListRoom({
 
   const StatusIcon = ({ status }: { status: RoomStatus }) => {
     switch (status) {
-      case "Connected":
+      case "Safe":
+      case "Low Risk":
         return <MdLink className={`text-xl ${statusStyles[status]}`} />;
       case "Disconnected":
         return <MdLinkOff className={`text-xl ${statusStyles[status]}`} />;
@@ -102,11 +102,9 @@ export default function ListRoom({
 
           let initialStatus: RoomStatus = "Disconnected";
           if (!isTimeout) {
-            if (temp >= 65) initialStatus = "Emergency";
-            else if (temp >= 60) initialStatus = "Warning Level 2";
-            else if (temp >= 55) initialStatus = "Warning Level 1";
-            else initialStatus = "Connected";
+            initialStatus = (item.status || "Safe") as RoomStatus;
           }
+
           lastStatusRef.current[item.room_id] = initialStatus;
           return {
             id: item._id,
@@ -121,11 +119,12 @@ export default function ListRoom({
     socket.on("room-status-update", (data) => {
       const newStatus = data.status as RoomStatus;
       const prevStatus = lastStatusRef.current[data.room_id];
-      const isDanger = [
-        "Warning Level 1",
-        "Warning Level 2",
-        "Emergency",
-      ].includes(newStatus);
+      const dangerLevels: RoomStatus[] = [
+        "Moderate Risk",
+        "High Risk",
+        "Critical",
+      ];
+      const isDanger = dangerLevels.includes(newStatus);
 
       if (isDanger && newStatus !== prevStatus) {
         triggerAlert(data.room_id, newStatus);
@@ -172,7 +171,7 @@ export default function ListRoom({
           style: { borderRadius: "8px", background: "#333", color: "#fff" },
         }}
       />
-      <div className="w-60 p-6 max-md:absolute max-md:bottom-0 max-md:w-full max-md:border-t md:flex md:h-[calc(100vh-120px)] md:flex-col md:justify-between md:border-r">
+      <div className="w-60 bg-black p-6 max-md:fixed max-md:bottom-0 max-md:w-full max-md:border-t md:flex md:h-[calc(100vh-120px)] md:flex-col md:justify-between md:border-r">
         <div onClick={() => setIsRollUp(!isRollUp)}>
           <h2 className="flex cursor-pointer justify-between text-2xl font-bold">
             List Rooms{" "}

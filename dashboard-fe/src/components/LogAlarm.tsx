@@ -1,7 +1,7 @@
+"use client";
 import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import Button from "./atoms/Button";
-import { FaCloudDownloadAlt } from "react-icons/fa";
+import { FaCloudDownloadAlt, FaTrash } from "react-icons/fa";
 
 const socket: Socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`);
 
@@ -12,25 +12,22 @@ interface AlarmLog {
   timestamp: string;
 }
 
-interface AlarmLogData {
-  id: string | number;
-  room_id: string;
-  status: string;
-  value: number;
-  timestamp: string;
-}
-
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export default function LogAlarmSection() {
   const [logs, setLogs] = useState<AlarmLog[]>([]);
 
+  // 1. Fungsi Helper untuk Format Status (Menghilangkan "Connected" -> "Safe")
+  const formatStatus = (status: string) => {
+    if (status === "Connected") return "Safe";
+    return status;
+  };
+
   const deleteLog = async (id: string | number) => {
     const isConfirmed = window.confirm(
-      "Apakah Anda yakin ingin menghapus log alarm ini?",
+      "Do you really want to delete this alarm log?",
     );
-
-    if (!isConfirmed) return; // Batalkan jika user klik 'Cancel'
+    if (!isConfirmed) return;
 
     try {
       const response = await fetch(`${backendUrl}/api/rooms/alarms/${id}`, {
@@ -39,68 +36,49 @@ export default function LogAlarmSection() {
 
       if (response.ok) {
         setLogs((prev) => prev.filter((log) => log.id !== id));
-        alert("✅ Log alarm berhasil dihapus!");
+        alert("Alarm log deleted successfully!");
       } else {
         const errorData = await response.json();
-        alert(
-          `❌ Gagal menghapus: ${errorData.error || "Terjadi kesalahan server"}`,
-        );
+        alert(`Failed to delete: ${errorData.error || "Server error"}`);
       }
     } catch (err) {
-      console.error("Delete failed", err);
-      alert("❌ Gagal terhubung ke server. Pastikan backend menyala.");
+      alert("Failed to connect to the server.");
     }
   };
 
   const downloadLogs = async () => {
     try {
       const response = await fetch(`${backendUrl}/api/rooms/alarms`);
-      if (!response.ok) throw new Error("Gagal mengambil data untuk download");
+      if (!response.ok) throw new Error("Failed to retrieve data.");
 
       const data = await response.json();
-
       if (data.length === 0) {
-        alert("⚠️ Tidak ada data log untuk didownload.");
+        alert("There is no log data available.");
         return;
       }
 
-      // 1. Definisikan Header CSV
-      const headers = ["ID Ruangan", "Status", "Nilai", "Waktu"];
-
-      // 2. Map data ke baris CSV
+      const headers = ["Room ID", "Risk Level", "Value", "Timestamp"];
       const rows = data.map((log: any) => [
         log.room_id,
-        log.status,
+        formatStatus(log.status),
         log.value || 0,
         new Date(log.timestamp).toLocaleString(),
       ]);
 
-      // 3. Gabungkan Header dan Baris
-      const csvContent = [
-        headers.join(","),
-        ...rows.map((row: any) => row.join(",")),
-      ].join("\n");
+      const csvContent =
+        "\ufeff" +
+        [headers.join(","), ...rows.map((row: any) => row.join(","))].join(
+          "\n",
+        );
 
-      // 4. Buat Blob dan Link Download
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-
-      link.setAttribute("href", url);
-      link.setAttribute(
-        "download",
-        `log_alarm_${new Date().toISOString().split("T")[0]}.csv`,
-      );
-      link.style.visibility = "hidden";
-
-      document.body.appendChild(link);
+      link.href = url;
+      link.download = `Log_Risk_Alarm_${new Date().toISOString().split("T")[0]}.csv`;
       link.click();
-      document.body.removeChild(link);
-
-      alert("✅ File CSV berhasil diunduh!");
     } catch (err) {
-      console.error("Download failed:", err);
-      alert("❌ Gagal mendownload log.");
+      alert("Failed to download log.");
     }
   };
 
@@ -108,17 +86,14 @@ export default function LogAlarmSection() {
     const fetchAlarmHistory = async () => {
       try {
         const response = await fetch(`${backendUrl}/api/rooms/alarms`);
-
-        if (!response.ok) {
+        if (!response.ok)
           throw new Error(`HTTP error! status: ${response.status}`);
-        }
 
         const data = await response.json();
-
         const formattedLogs: AlarmLog[] = data.map((log: any) => ({
-          id: log._id || Math.random(),
+          id: log._id,
           room_id: log.room_id,
-          status: log.status === "Connected" ? "Normal" : log.status,
+          status: formatStatus(log.status),
           timestamp: new Date(log.timestamp).toLocaleTimeString(),
         }));
 
@@ -133,16 +108,15 @@ export default function LogAlarmSection() {
     socket.on("new-alarm", (data: any) => {
       setLogs((prevLogs) => {
         const newLog: AlarmLog = {
-          id: data._id, // Gunakan ID dari MongoDB
+          id: data._id,
           room_id: data.room_id,
-          status: data.status === "Connected" ? "Normal" : data.status,
+          status: formatStatus(data.status),
           timestamp: new Date(data.timestamp).toLocaleTimeString(),
         };
         return [newLog, ...prevLogs].slice(0, 50);
       });
     });
 
-    // Listener untuk sinkronisasi jika user lain menghapus alarm (Opsional)
     socket.on("alarm-deleted", (deletedId: string) => {
       setLogs((prev) => prev.filter((log) => log.id !== deletedId));
     });
@@ -153,19 +127,25 @@ export default function LogAlarmSection() {
     };
   }, []);
 
+  // 2. Update Warna Berdasarkan Logika Risk Level Baru
   const getStatusColor = (status: string): string => {
     const s = status.toLowerCase();
-    if (s.includes("emergency")) return "text-red-500";
-    if (s.includes("warning")) return "text-yellow-500";
+    if (s.includes("critical")) return "text-red-600 font-bold animate-pulse";
+    if (s.includes("high risk")) return "text-orange-600 font-bold";
+    if (s.includes("moderate")) return "text-orange-400";
+    if (s.includes("low risk")) return "text-blue-500";
     if (s.includes("disconnected")) return "text-gray-400";
-    return "text-green-500";
+    return "text-green-500"; // Untuk "Safe" atau "Normal"
   };
 
   return (
-    <div className="w-80 p-6 max-md:bottom-0 max-md:hidden max-md:w-full max-md:border-t md:flex md:h-[calc(100vh-120px)] md:flex-col md:border-l">
-      <h2 className="mb-4 border-b pb-2 text-2xl font-bold">
-        Log Alarm <FaCloudDownloadAlt onClick={downloadLogs} />
-      </h2>
+    <div className="w-160 border-gray-200 p-6 max-md:hidden md:flex md:h-[calc(100vh-120px)] md:flex-col md:border-l">
+      <div className="mb-4 flex items-center justify-between pb-2">
+        <h2 className="text-2xl font-bold">Log Alarm</h2>
+        <button onClick={downloadLogs} title="Download CSV Reports">
+          <FaCloudDownloadAlt size={20} />
+        </button>
+      </div>
 
       <div className="scrollbar-thin scrollbar-thumb-gray-300 flex-1 space-y-3 overflow-y-auto pr-2">
         {logs.length === 0 ? (
@@ -174,7 +154,7 @@ export default function LogAlarmSection() {
           logs.map((log) => (
             <div
               key={log.id}
-              className="group relative border-b border-gray-100 pb-2"
+              className="group relative border-b border-gray-500 pb-2"
             >
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold">
@@ -184,12 +164,12 @@ export default function LogAlarmSection() {
                   <span className="text-[10px] text-gray-400">
                     {log.timestamp}
                   </span>
-                  {/* Tombol Delete muncul saat hover */}
                   <button
                     onClick={() => deleteLog(log.id)}
-                    className="text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-600"
+                    className="flex h-full items-center text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-600"
+                    title="Delete log"
                   >
-                    ✕
+                    <FaTrash size={16} />
                   </button>
                 </div>
               </div>
