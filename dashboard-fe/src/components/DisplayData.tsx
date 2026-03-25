@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, ReactNode } from "react";
+import { useState, useEffect, ReactNode, useMemo } from "react";
 import { socket } from "@/lib/socket";
 import { Line } from "react-chartjs-2";
 import {
@@ -40,6 +40,16 @@ function Card({ children }: CardProps) {
   );
 }
 
+const LIMITS = {
+  HUMIDITY_OPTIMAL_MIN: 10,
+  HUMIDITY_OPTIMAL_MAX: 20,
+  HUMIDITY_CRITICAL_LOW: 5,
+  HUMIDITY_CRITICAL_HIGH: 30,
+  TEMP_CRITICAL: 55,
+  TEMP_WARNING_HIGH: 40,
+  TEMP_NORMAL_MAX: 30,
+};
+
 export default function DisplayData({
   selectedRoomId,
 }: {
@@ -48,6 +58,26 @@ export default function DisplayData({
   const [data, setData] = useState({ temp: 0, hum: 0 });
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const riskInfo = useMemo(() => {
+    const { temp, hum } = data;
+    if (temp === 0 && hum === 0) return { label: "Offline", color: "#9ca3af" };
+
+    if (
+      temp >= LIMITS.TEMP_CRITICAL ||
+      hum < LIMITS.HUMIDITY_CRITICAL_LOW ||
+      hum > LIMITS.HUMIDITY_CRITICAL_HIGH
+    ) {
+      return { label: "CRITICAL", color: "#DC2626" };
+    }
+    if (temp >= LIMITS.TEMP_WARNING_HIGH) {
+      return { label: "HIGH RISK", color: "#EA580C" };
+    }
+    if (temp >= LIMITS.TEMP_NORMAL_MAX) {
+      return { label: "MODERATE", color: "#FB923C" };
+    }
+    return { label: "SAFE", color: "#22c55e" };
+  }, [data]);
 
   useEffect(() => {
     if (!selectedRoomId) return;
@@ -101,7 +131,6 @@ export default function DisplayData({
       }
     };
 
-    // HANDLER 2: Menerima sinyal "Disconnected" (0-kan data)
     const handleStatusUpdate = (statusData: any) => {
       if (
         statusData.room_id === selectedRoomId &&
@@ -176,37 +205,60 @@ export default function DisplayData({
     <div
       className={`w-full p-4 transition-opacity md:p-6 ${loading ? "opacity-50" : "opacity-100"}`}
     >
-      <h2 className="mb-4 text-2xl font-bold">Monitoring: {selectedRoomId}</h2>
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="mb-4 flex flex-col justify-between gap-2 md:flex-row md:items-end">
+        <div>
+          <h2 className="text-2xl font-bold">Monitoring: {selectedRoomId}</h2>
+          <p className="text-sm text-gray-500">
+            Berdasarkan standar IMSBC Code
+          </p>
+        </div>
+        {/* Indikator Status Risiko Baru */}
+        <div
+          className="flex items-center gap-2 rounded-full border px-4 py-1"
+          style={{ borderColor: riskInfo.color }}
+        >
+          <div
+            className="h-3 w-3 animate-pulse rounded-full"
+            style={{ backgroundColor: riskInfo.color }}
+          />
+          <span className="text-sm font-bold" style={{ color: riskInfo.color }}>
+            {riskInfo.label}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Card Temperature */}
         <Card>
           <h2 className="mb-2 text-xl font-bold">Temperature Palka</h2>
           <GaugeComponent
             value={data.temp}
-            minValue={-10}
-            maxValue={100}
+            minValue={0}
+            maxValue={80}
             arc={{
               width: 0.2,
               padding: 0.02,
               subArcs: [
-                { limit: 55, color: "#5BE12C" }, // 0 - 55: Aman (Hijau)
-                { limit: 60, color: "#FB923C" }, // 55 - 60: Warning Level 1 (Oranye Muda)
-                { limit: 65, color: "#EA580C" }, // 60 - 65: Warning Level 2 (Oranye Tua)
-                { color: "#DC2626" }, // > 65: Emergency (Merah)
+                { limit: LIMITS.TEMP_NORMAL_MAX, color: "#22c55e" }, // Safe
+                { limit: LIMITS.TEMP_WARNING_HIGH, color: "#FB923C" }, // Moderate
+                { limit: LIMITS.TEMP_CRITICAL, color: "#EA580C" }, // High
+                { color: "#DC2626" }, // Critical
               ],
             }}
-            labels={{
-              valueLabel: {
-                hide: true, // Ini akan menyembunyikan angka di dalam gauge
-              },
-              tickLabels: {
-                hideMinMax: false, // Set ke true jika ingin sembunyikan angka 0 dan 100 juga
-              },
-            }}
+            labels={{ valueLabel: { hide: true } }}
           />
           <div
             className="my-4 text-5xl font-black"
-            style={{ color: getTempColor(data.temp) }}
+            style={{
+              color:
+                data.temp <= LIMITS.TEMP_NORMAL_MAX
+                  ? "#22c55e" // Safe - hijau
+                  : data.temp <= LIMITS.TEMP_WARNING_HIGH
+                    ? "#FB923C" // Moderate - oranye
+                    : data.temp <= LIMITS.TEMP_CRITICAL
+                      ? "#EA580C" // High - oranye tua
+                      : "#DC2626", // Critical - merah
+            }}
           >
             {data.temp}
             <span className="text-xl">°C</span>
@@ -241,25 +293,35 @@ export default function DisplayData({
           <h2 className="mb-2 text-xl font-bold">Humidity Palka</h2>
           <GaugeComponent
             value={data.hum}
+            minValue={0}
+            maxValue={100}
             arc={{
+              width: 0.2,
+              padding: 0.02,
               subArcs: [
-                { limit: 30, color: "#93C5FD" },
-                { limit: 70, color: "#3B82F6" },
-                { color: "#1E3A8A" },
+                { limit: LIMITS.HUMIDITY_CRITICAL_LOW, color: "#0c4a6e" }, // Kering - biru gelap
+                { limit: LIMITS.HUMIDITY_OPTIMAL_MIN, color: "#3b82f6" }, // Optimal low - biru cerah
+                { limit: LIMITS.HUMIDITY_OPTIMAL_MAX, color: "#60a5fa" }, // Optimal high - biru muda
+                { limit: LIMITS.HUMIDITY_CRITICAL_HIGH, color: "#0284c7" }, // Basah - biru medium
+                { color: "#0e7490" }, // Sangat basah - biru tua
               ],
             }}
-            labels={{
-              valueLabel: {
-                hide: true,
-              },
-              // tickLabels: {
-              //   hideMinMax: false, // Set ke true jika ingin sembunyikan angka 0 dan 100 juga
-              // },
-            }}
+            labels={{ valueLabel: { hide: true } }}
           />
           <div
             className="my-4 text-5xl font-black"
-            style={{ color: getHumColor(data.hum) }}
+            style={{
+              color:
+                data.hum <= LIMITS.HUMIDITY_CRITICAL_LOW
+                  ? "#0c4a6e" // Kering - biru gelap
+                  : data.hum <= LIMITS.HUMIDITY_OPTIMAL_MIN
+                    ? "#3b82f6" // Optimal low - biru cerah
+                    : data.hum <= LIMITS.HUMIDITY_OPTIMAL_MAX
+                      ? "#60a5fa" // Optimal high - biru muda
+                      : data.hum <= LIMITS.HUMIDITY_CRITICAL_HIGH
+                        ? "#0284c7" // Basah - biru medium
+                        : "#0e7490", // Sangat basah - biru tua
+            }}
           >
             {data.hum}
             <span className="text-xl">%</span>
@@ -288,6 +350,13 @@ export default function DisplayData({
             />
           </div>
         </Card>
+      </div>
+
+      {/* Legend Information */}
+      <div className="mt-6 rounded-md bg-blue-50 p-4 text-xs text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+        <strong>💡 Info IMSBC Code:</strong> Batubara paling stabil pada
+        kelembapan 10-20%. Suhu di atas 55°C menandakan reaksi oksidasi kritis
+        yang harus segera ditangani.
       </div>
     </div>
   );
