@@ -84,4 +84,27 @@ const logSensorData = async (room_id, payload) => {
   );
 };
 
-module.exports = { updateRoomStatus, getAllRooms, getRoomTrend, logSensorData };
+const logAlarm = async (room_id, status, value) => {
+  const db = getDB();
+  const alarmEntry = {
+    room_id,
+    status,
+    value, // menyimpan nilai temperatur saat alarm terjadi
+    timestamp: new Date(),
+  };
+
+  try {
+    await db.collection("alarm_logs").insertOne(alarmEntry);
+    return alarmEntry;
+  } catch (err) {
+    console.error("ERROR: Failed to log alarm:", err);
+  }
+};
+
+module.exports = {
+  updateRoomStatus,
+  getAllRooms,
+  getRoomTrend,
+  logSensorData,
+  logAlarm,
+};

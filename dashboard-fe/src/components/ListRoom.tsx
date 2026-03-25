@@ -27,6 +27,7 @@ export default function ListRoom({
 }) {
   const [isRollUp, setIsRollUp] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [alertQueue, setAlertQueue] = useState<any[]>([]);
 
   const lastStatusRef = useRef<Record<string, RoomStatus>>({});
 
@@ -54,7 +55,6 @@ export default function ListRoom({
       case "Disconnected":
         return <MdLinkOff className={`text-xl ${statusStyles[status]}`} />;
       default:
-        // Warning Level 1, 2, dan Emergency menggunakan ikon yang sama
         return (
           <MdOutlineWarningAmber
             className={`text-xl ${statusStyles[status]}`}
@@ -100,81 +100,52 @@ export default function ListRoom({
         setRooms(formattedRooms);
       });
 
-    socket.on(
-      "room-status-update",
-      (data: {
-        id: string;
-        room_id: string;
-        status: string;
-        timestamp: string;
-      }) => {
-        setRooms((prevRooms) => {
-          const roomExists = prevRooms.find((r) => r.room_id === data.room_id);
-          const newStatus = data.status as RoomStatus;
-          const prevStatus = lastStatusRef.current[data.room_id];
+    socket.on("room-status-update", (data) => {
+      const newStatus = data.status as RoomStatus;
+      const prevStatus = lastStatusRef.current[data.room_id];
 
-          const isDanger = [
-            "Warning Level 1",
-            "Warning Level 2",
-            "Emergency",
-          ].includes(newStatus);
-          if (isDanger && newStatus !== prevStatus) {
-            // 1. Toast Notification (In-App)
-            toast.custom(
-              (t) => (
-                <div
-                  className={`${t.visible ? "animate-enter" : "animate-leave"} ring-opacity-5 pointer-events-auto flex w-full max-w-md rounded-lg bg-red-600 p-4 text-white shadow-lg ring-1 ring-black`}
-                >
-                  <div className="flex-1">
-                    <p className="text-sm font-bold tracking-wide uppercase">
-                      Peringatan Keamanan!
-                    </p>
-                    <p className="mt-1 text-sm">
-                      {data.room_id} masuk ke status {newStatus}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => toast.dismiss(t.id)}
-                    className="ml-4 font-bold"
-                  >
-                    X
-                  </button>
-                </div>
-              ),
-              { duration: 5000 },
-            );
+      const isDanger = [
+        "Warning Level 1",
+        "Warning Level 2",
+        "Emergency",
+      ].includes(newStatus);
 
-            // 2. Browser Native Notification
-            triggerNativeNotification(data.room_id, newStatus);
-          }
+      if (isDanger && newStatus !== prevStatus) {
+        setAlertQueue((prev) => [
+          ...prev,
+          { room_id: data.room_id, status: newStatus },
+        ]);
+      }
 
-          lastStatusRef.current[data.room_id] = newStatus;
+      lastStatusRef.current[data.room_id] = newStatus;
 
-          if (roomExists) {
-            return prevRooms.map((room) =>
-              room.room_id === data.room_id
-                ? {
-                    ...room,
-                    id: data.id,
-                    status: newStatus,
-                    last_active: data.timestamp,
-                  }
-                : room,
-            );
-          } else {
-            return [
-              ...prevRooms,
-              {
-                id: data.id,
-                room_id: data.room_id,
-                status: newStatus,
-                last_active: data.timestamp,
-              },
-            ];
-          }
-        });
-      },
-    );
+      setRooms((prevRooms) => {
+        const roomExists = prevRooms.find((r) => r.room_id === data.room_id);
+
+        if (roomExists) {
+          return prevRooms.map((room) =>
+            room.room_id === data.room_id
+              ? {
+                  ...room,
+                  id: data.id,
+                  status: newStatus,
+                  last_active: data.timestamp,
+                }
+              : room,
+          );
+        } else {
+          return [
+            ...prevRooms,
+            {
+              id: data.id,
+              room_id: data.room_id,
+              status: newStatus,
+              last_active: data.timestamp,
+            },
+          ];
+        }
+      });
+    });
 
     // Bersihkan listener saat komponen tidak lagi digunakan
     return () => {

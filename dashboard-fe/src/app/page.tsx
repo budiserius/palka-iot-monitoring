@@ -2,6 +2,7 @@
 import DisplayData from "@/components/DisplayData";
 import HeaderDashboard from "@/components/HeaderDashboard";
 import ListRoom from "@/components/ListRoom";
+import LogAlarmSection from "@/components/LogAlarm";
 import { useState } from "react";
 
 export default function Home() {
@@ -12,6 +13,7 @@ export default function Home() {
       <div className="md:flex md:w-full">
         <ListRoom onSelectRoom={(id) => setActiveRoom(id)} />
         <DisplayData selectedRoomId={activeRoom} />
+        <LogAlarmSection />
       </div>
     </main>
   );

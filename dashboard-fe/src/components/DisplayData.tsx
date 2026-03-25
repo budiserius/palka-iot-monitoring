@@ -82,7 +82,6 @@ export default function DisplayData({
 
     fetchData();
 
-    // HANDLER 1: Menerima data sensor normal
     const handleUpdate = (newData: any) => {
       if (newData.room_id === selectedRoomId) {
         const sensorPayload = {
@@ -95,8 +94,9 @@ export default function DisplayData({
 
         setHistory((prev) => {
           const updated = [...prev, sensorPayload];
-          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-          return updated.filter((d) => new Date(d.timestamp) >= oneDayAgo);
+          // const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          // return updated.filter((d) => new Date(d.timestamp) >= oneDayAgo);
+          return updated.slice(-600); // tampilkan 30 data terakhir
         });
       }
     };
