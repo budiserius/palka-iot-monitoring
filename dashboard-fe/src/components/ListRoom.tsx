@@ -48,21 +48,19 @@ export default function ListRoom({
 
     toast.error(
       (t) => (
-        <span className="flex flex-col gap-1">
-          <b className="font-bold">Bahaya Terdeteksi!</b>
-          <span className="text-sm">
-            Ruangan {room} berstatus {status}
-          </span>
-          <button
-            onClick={() => {
-              onSelectRoom(room);
-              toast.dismiss(t.id);
-            }}
-            className="mt-2 w-fit rounded bg-red-600 px-2 py-1 text-xs text-white"
-          >
-            Lihat Detail
-          </button>
-        </span>
+        <>
+          <div className="flex items-center justify-between rounded bg-red-600 px-3 py-2 text-white">
+            <span className="text-sm font-medium">
+              Danger Detected: Room {room} is {status}.
+            </span>
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="ml-2 font-bold text-white"
+            >
+              ✕
+            </button>
+          </div>
+        </>
       ),
       {
         duration: 6000,
@@ -173,7 +171,7 @@ export default function ListRoom({
           style: { borderRadius: "8px", background: "#333", color: "#fff" },
         }}
       />
-      <div className="w-60 p-6 max-md:absolute max-md:bottom-0 max-md:w-full max-md:border-t md:flex md:h-[calc(100vh-120px)] md:flex-col md:justify-between md:border-r">
+      <div className="w-60 bg-black p-6 max-md:fixed max-md:bottom-0 max-md:w-full max-md:border-t md:flex md:h-[calc(100vh-120px)] md:flex-col md:justify-between md:border-r">
         <div onClick={() => setIsRollUp(!isRollUp)}>
           <h2 className="flex cursor-pointer justify-between text-2xl font-bold">
             List Rooms{" "}

@@ -208,9 +208,9 @@ export default function DisplayData({
       <div className="mb-4 flex flex-col justify-between gap-2 md:flex-row md:items-end">
         <div>
           <h2 className="text-2xl font-bold">Monitoring: {selectedRoomId}</h2>
-          <p className="text-sm text-gray-500">
+          {/* <p className="text-sm text-gray-500">
             Berdasarkan standar IMSBC Code
-          </p>
+          </p> */}
         </div>
         {/* Indikator Status Risiko Baru */}
         <div
@@ -353,11 +353,11 @@ export default function DisplayData({
       </div>
 
       {/* Legend Information */}
-      <div className="mt-6 rounded-md bg-blue-50 p-4 text-xs text-blue-800 dark:bg-blue-950 dark:text-blue-200">
+      {/* <div className="mt-6 rounded-md bg-blue-50 p-4 text-xs text-blue-800 dark:bg-blue-950 dark:text-blue-200">
         <strong>💡 Info IMSBC Code:</strong> Batubara paling stabil pada
         kelembapan 10-20%. Suhu di atas 55°C menandakan reaksi oksidasi kritis
         yang harus segera ditangani.
-      </div>
+      </div> */}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
-import { FaCloudDownloadAlt } from "react-icons/fa";
+import { FaCloudDownloadAlt, FaTrash } from "react-icons/fa";
 
 const socket: Socket = io(`${process.env.NEXT_PUBLIC_SOCKET_URL}`);
 
@@ -139,15 +139,11 @@ export default function LogAlarmSection() {
   };
 
   return (
-    <div className="w-80 border-gray-200 p-6 max-md:hidden md:flex md:h-[calc(100vh-120px)] md:flex-col md:border-l">
-      <div className="mb-4 flex items-center justify-between border-b pb-2">
+    <div className="w-160 border-gray-200 p-6 max-md:hidden md:flex md:h-[calc(100vh-120px)] md:flex-col md:border-l">
+      <div className="mb-4 flex items-center justify-between pb-2">
         <h2 className="text-2xl font-bold">Log Alarm</h2>
-        <button
-          onClick={downloadLogs}
-          className="rounded-full p-2 text-blue-600 transition-colors hover:bg-blue-50"
-          title="Download CSV Reports"
-        >
-          <FaCloudDownloadAlt size={24} />
+        <button onClick={downloadLogs} title="Download CSV Reports">
+          <FaCloudDownloadAlt size={20} />
         </button>
       </div>
 
@@ -158,10 +154,10 @@ export default function LogAlarmSection() {
           logs.map((log) => (
             <div
               key={log.id}
-              className="group relative border-b border-gray-100 pb-2"
+              className="group relative border-b border-gray-500 pb-2"
             >
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-700">
+                <span className="text-sm font-semibold">
                   Room: {log.room_id}
                 </span>
                 <div className="flex items-center gap-2">
@@ -170,10 +166,10 @@ export default function LogAlarmSection() {
                   </span>
                   <button
                     onClick={() => deleteLog(log.id)}
-                    className="text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-600"
+                    className="flex h-full items-center text-red-400 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-600"
                     title="Delete log"
                   >
-                    ✕
+                    <FaTrash size={16} />
                   </button>
                 </div>
               </div>
